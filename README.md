@@ -1,119 +1,105 @@
 # saltbox_mod
 
-Environment for managing custom Ansible roles within a Saltbox host.
+Custom Saltbox-compatible Ansible roles for my Saltbox host.
 
-## Installation
+This repository is based on [`saltyorg/saltbox_mod`](https://github.com/saltyorg/saltbox_mod) and is intended to hold only locally maintained roles. Host-specific values and secrets belong in the Saltbox Inventory, not in this repository.
+
+## Connect Saltbox to this fork
+
+Add the following to the Saltbox Inventory:
+
+```yaml
+saltbox_mod_repo: "https://github.com/s3tupw1zard/saltbox_mod.git"
+saltbox_mod_branch: "main"
+saltbox_mod_force_overwrite: true
+```
+
+Then run:
 
 ```bash
 sb install saltbox-mod
 ```
 
-Alternatively:
-```bash
-git clone https://github.com/saltyorg/saltbox_mod.git /opt/saltbox_mod
-```
-
-## Usage
-
-### From Scratch
-
-1. Create folders for the Ansible role:
-
-    ```bash
-    mkdir -p /opt/saltbox_mod/roles/newrole/{defaults,tasks}
-    ```
-
-1. Place the defaults and tasks files in there:
-
-    ```bash
-    touch /opt/saltbox_mod/roles/newrole/{defaults,tasks}/main.yml
-    ```
-
-1. Code your role by adding variables and tasks to the respective files.
-
-1. (_Legacy_*) Optionally, add custom variables into `settings.yml`:
-
-    ```bash
-    /opt/saltbox_mod/settings.yml
-    ```
-   
-   &ast; Use of the [Inventory system](https://docs.saltbox.dev/saltbox/inventory) is now preferred over this method.
-    
-1. Add the Ansible role and tags to the `saltbox_mod.yml` playbook:
-
-    To edit:
-
-    ```bash
-    $EDITOR /opt/saltbox_mod/saltbox_mod.yml
-    ```
-
-    Add the following line in the appropriate section under `roles:`:
-
-    ```yaml
-        - { role: newrole, tags: ['newrole'] }
-    ```
-
-    Final result:
-
-    ```yaml
-    ---
-    - hosts: localhost
-      module_defaults:
-        ansible.builtin.setup:
-          fact_path: "/srv/git/saltbox/ansible_facts.d"
-      vars_files:
-        - settings.yml
-        - ['/srv/git/saltbox/accounts.yml', '/srv/git/saltbox/defaults/accounts.yml.default']
-        - ['/srv/git/saltbox/settings.yml', '/srv/git/saltbox/defaults/settings.yml.default']
-        - ['/srv/git/saltbox/adv_settings.yml', '/srv/git/saltbox/defaults/adv_settings.yml.default']
-      roles:
-        # Reqs
-        - { role: pre_tasks, tags: ['always', 'pre_tasks'] }
-        # Apps Start
-        - { role: helloworld, tags: ['helloworld'] }
-        - { role: myrole, tags: ['myrole'] }
-        - { role: newrole, tags: ['newrole'] }
-        # Apps End
-    ```
-
-    Caution: The `pre_tasks` role is required and should not be removed.
-
-1. Deploy the Ansible role:
-
-    ```bash
-    sb install mod-newrole
-    ```
-
-    Alternatively :
-    ```bash
-    sudo ansible-playbook saltbox_mod.yml --tags newrole
-    ```
-
----
-
-### From an Existing Role
-
-Steps 1 to 3 can be simplified by using the `helloworld` role as a template.
-It should be usable without too much modification for most web apps that use a single web port.
-
-```bash
-cp -r /opt/saltbox_mod/roles/helloworld /opt/saltbox_mod/roles/newrole && \
-sed -i 's/helloworld/newrole/g' /opt/saltbox_mod/roles/newrole/*/main.yml
-```
-
-Then edit the defaults settings:
-
-```bash
-$EDITOR /opt/saltbox_mod/roles/newrole/defaults/main.yml
-```
-
-At the very minimum, you may expect to have to update the following variables:
+After the first successful switch to this fork, set:
 
 ```yaml
-newrole_web_port:
-newrole_docker_image:
-newrole_docker_envs_default:
-newrole_docker_volumes_default:
+saltbox_mod_force_overwrite: false
 ```
 
-Proceed to step 4.
+The repository is installed to `/opt/saltbox_mod` by Saltbox.
+
+## Installing a custom role
+
+Every real role must be registered in `saltbox_mod.yml`:
+
+```yaml
+- { role: appname, tags: ['appname'] }
+```
+
+Deploy it with:
+
+```bash
+sb install mod-appname
+```
+
+For example, a future `kkrepo` role will be installed with:
+
+```bash
+sb install mod-kkrepo
+```
+
+## Creating a role
+
+`roles/_template` is a non-deployed template that follows the current Saltbox role conventions.
+
+Copy it:
+
+```bash
+cd /opt/saltbox_mod
+cp -a roles/_template roles/appname
+find roles/appname -type f -exec sed -i 's/appname/yourapp/g' {} +
+```
+
+Then adjust at least:
+
+- Docker image repository and tag
+- web port
+- environment variables
+- volume mounts
+- Traefik/API settings if required
+- any additional directories, networks, devices, capabilities or commands
+
+Finally register the role in `saltbox_mod.yml`.
+
+## Inventory overrides
+
+Use Saltbox Inventory overrides for machine-specific settings. Prefer `_custom` variables where a role exposes a `*_default` / `*_custom` pair.
+
+Example:
+
+```yaml
+myapp_role_docker_envs_custom:
+  SOME_SETTING: "value"
+```
+
+Do not commit passwords, API keys, tokens or other secrets to this repository.
+
+## Repository layout
+
+```text
+saltbox_mod.yml          # playbook and role registration
+settings.yml             # legacy compatibility; Inventory is preferred
+roles/
+  _template/             # copy-only role template, not deployed
+  <app>/                 # actual custom roles
+```
+
+## Updating containers
+
+Running a role again causes Saltbox to pull the configured image when `*_role_docker_image_pull: true` and recreate the container as needed:
+
+```bash
+sb install mod-appname
+```
+
+Automatic image monitoring/updating is separate from the role itself. Saltbox provides Diun for update notifications, while tools such as Dockwatch can manage updates when explicitly configured with the required Docker socket permissions.
