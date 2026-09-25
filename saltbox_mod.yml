@@ -9,9 +9,10 @@
     - ['/srv/git/saltbox/settings.yml', '/srv/git/saltbox/defaults/settings.yml.default']
     - ['/srv/git/saltbox/adv_settings.yml', '/srv/git/saltbox/defaults/adv_settings.yml.default']
   roles:
-    # Reqs
+    # Required by saltbox_mod. Do not remove.
     - { role: pre_tasks, tags: ['always', 'pre_tasks'] }
-    # Apps Start
-    - { role: myrole, tags: ['myrole'] }
-    - { role: helloworld, tags: ['helloworld'] }
-    # Apps End
+
+    # Custom Apps Start
+    # Add custom roles here, for example:
+    # - { role: kkrepo, tags: ['kkrepo'] }
+    # Custom Apps End
