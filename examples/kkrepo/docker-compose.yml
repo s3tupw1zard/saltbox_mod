@@ -1,0 +1,91 @@
+name: kkrepo
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: kkrepo-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${KKREPO_MYSQL_ROOT_PASSWORD:?set KKREPO_MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${KKREPO_MYSQL_DATABASE:-kkrepo}
+      MYSQL_USER: ${KKREPO_MYSQL_USER:-kkrepo}
+      MYSQL_PASSWORD: ${KKREPO_MYSQL_PASSWORD:?set KKREPO_MYSQL_PASSWORD in .env}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - /opt/kkrepo/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - database-internal
+
+  app-data-perms:
+    image: alpine:3.20
+    container_name: kkrepo-data-perms
+    user: root
+    restart: "no"
+    volumes:
+      - /opt/kkrepo/data:/data
+    command:
+      - sh
+      - -ec
+      - |
+        mkdir -p /data/blobs
+        chown -R 999:999 /data
+    network_mode: none
+
+  kkrepo:
+    image: ghcr.io/klboke/kkrepo:${KKREPO_IMAGE_TAG:-1.1.0}
+    container_name: kkrepo
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      app-data-perms:
+        condition: service_completed_successfully
+    environment:
+      KKREPO_DATABASE_TYPE: mysql
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${KKREPO_MYSQL_DATABASE:-kkrepo}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=${KKREPO_DB_TIMEZONE:-Europe/Berlin}&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${KKREPO_MYSQL_USER:-kkrepo}
+      SPRING_DATASOURCE_PASSWORD: ${KKREPO_MYSQL_PASSWORD:?set KKREPO_MYSQL_PASSWORD in .env}
+      KKREPO_CREDENTIAL_SECRET: ${KKREPO_CREDENTIAL_SECRET:?set KKREPO_CREDENTIAL_SECRET in .env}
+      KKREPO_API_KEY_PAYLOAD_SECRET: ${KKREPO_API_KEY_PAYLOAD_SECRET:?set KKREPO_API_KEY_PAYLOAD_SECRET in .env}
+      KKREPO_FILE_BASE_DIR: /var/lib/kkrepo/blobs
+      SERVER_TOMCAT_MAX_PART_COUNT: ${KKREPO_TOMCAT_MAX_PART_COUNT:-200}
+      KKREPO_SECURITY_SCANNING_ENABLED: "false"
+    ports:
+      - "${KKREPO_HTTP_PORT:-19090}:8080"
+    volumes:
+      - /opt/kkrepo/data:/var/lib/kkrepo
+    networks:
+      - database-internal
+      - application
+    labels:
+      diun.enable: "true"
+
+  # kkRepo's published JVM image is intentionally shell-less for health probing,
+  # so readiness is checked from this tiny sidecar instead.
+  kkrepo-health:
+    image: alpine:3.20
+    container_name: kkrepo-health
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - kkrepo
+    command: ["sleep", "infinity"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://kkrepo:8081/actuator/health/readiness >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - application
+
+networks:
+  database-internal:
+    internal: true
+  application:
