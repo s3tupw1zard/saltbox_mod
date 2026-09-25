@@ -14,4 +14,5 @@
 
     # Custom Apps Start
     - { role: kkrepo, tags: ['kkrepo'] }
+    - { role: infisical, tags: ['infisical'] }
     # Custom Apps End
