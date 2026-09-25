@@ -1,0 +1,121 @@
+#########################################################################
+# Title:         Saltbox Mod: kkRepo Role                               #
+# Author(s):     s3tupw1zard                                            #
+# URL:           https://github.com/s3tupw1zard/saltbox_mod             #
+# --                                                                    #
+#########################################################################
+#                   GNU General Public License v3.0                     #
+#########################################################################
+---
+- name: Check for an existing initialized kkRepo MySQL database
+  ansible.builtin.stat:
+    path: "{{ lookup('role_var', '_paths_mysql_location', role='kkrepo') }}/mysql"
+  register: kkrepo_mysql_initialized
+
+- name: Load existing kkRepo Saltbox facts
+  saltbox_facts:
+    role: kkrepo
+    instance: kkrepo
+    owner: "{{ user.name }}"
+    group: "{{ user.name }}"
+    mode: "0600"
+    base_path: "{{ server_appdata_path }}"
+  register: kkrepo_existing_saltbox_facts
+  no_log: true
+
+- name: Protect existing kkRepo data from accidental secret regeneration
+  ansible.builtin.fail:
+    msg: >-
+      Existing kkRepo MySQL data was found, but one or more persisted kkRepo
+      secrets are missing. Do not generate replacement secrets for an existing
+      database. Import the original values in the Saltbox Inventory using
+      kkrepo_role_mysql_root_password, kkrepo_role_mysql_password,
+      kkrepo_role_credential_secret and kkrepo_role_api_key_payload_secret,
+      then run sb install mod-kkrepo again.
+  when:
+    - kkrepo_mysql_initialized.stat.exists
+    - >-
+      ((kkrepo_existing_saltbox_facts.facts.mysql_root_password | default('') | length == 0)
+       and (lookup('role_var', '_mysql_root_password', role='kkrepo') | length == 0))
+      or
+      ((kkrepo_existing_saltbox_facts.facts.mysql_password | default('') | length == 0)
+       and (lookup('role_var', '_mysql_password', role='kkrepo') | length == 0))
+      or
+      ((kkrepo_existing_saltbox_facts.facts.credential_secret | default('') | length == 0)
+       and (lookup('role_var', '_credential_secret', role='kkrepo') | length == 0))
+      or
+      ((kkrepo_existing_saltbox_facts.facts.api_key_payload_secret | default('') | length == 0)
+       and (lookup('role_var', '_api_key_payload_secret', role='kkrepo') | length == 0))
+
+- name: Persist kkRepo secrets
+  saltbox_facts:
+    role: kkrepo
+    instance: kkrepo
+    keys:
+      mysql_root_password: >-
+        {{ lookup('role_var', '_mysql_root_password', role='kkrepo',
+                  default=lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=64),
+                  default_if_empty=true) }}
+      mysql_password: >-
+        {{ lookup('role_var', '_mysql_password', role='kkrepo',
+                  default=lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=64),
+                  default_if_empty=true) }}
+      credential_secret: >-
+        {{ lookup('role_var', '_credential_secret', role='kkrepo',
+                  default=lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=64),
+                  default_if_empty=true) }}
+      api_key_payload_secret: >-
+        {{ lookup('role_var', '_api_key_payload_secret', role='kkrepo',
+                  default=lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=64),
+                  default_if_empty=true) }}
+    owner: "{{ user.name }}"
+    group: "{{ user.name }}"
+    mode: "0600"
+    base_path: "{{ server_appdata_path }}"
+  register: kkrepo_saltbox_facts
+  no_log: true
+
+- name: Remove existing kkRepo Docker containers
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/remove_docker_container.yml"
+  vars:
+    container_name: "{{ item }}"
+  loop:
+    - "{{ kkrepo_name }}"
+    - "{{ kkrepo_mysql_name }}"
+
+- name: Create kkRepo directories
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/directories/create_directories.yml"
+
+- name: Ensure kkRepo application data ownership
+  ansible.builtin.file:
+    path: "{{ lookup('role_var', '_paths_data_location', role='kkrepo') }}"
+    state: directory
+    owner: "999"
+    group: "999"
+    mode: "0775"
+    recurse: true
+
+- name: Add kkRepo DNS record
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/dns/tasker.yml"
+  vars:
+    dns_record: "{{ lookup('role_var', '_dns_record', role='kkrepo') }}"
+    dns_zone: "{{ lookup('role_var', '_dns_zone', role='kkrepo') }}"
+    dns_proxy: "{{ lookup('role_var', '_dns_proxy', role='kkrepo') }}"
+
+- name: Create kkRepo MySQL container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
+  vars:
+    var_prefix: kkrepo_mysql
+
+- name: Wait for kkRepo MySQL to become healthy
+  community.docker.docker_container_info:
+    name: "{{ kkrepo_mysql_name }}"
+  register: kkrepo_mysql_container_info
+  retries: 24
+  delay: 5
+  until:
+    - kkrepo_mysql_container_info.exists
+    - kkrepo_mysql_container_info.container.State.Health.Status == 'healthy'
+
+- name: Create kkRepo container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
