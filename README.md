@@ -52,12 +52,13 @@ sb install mod-kkrepo
 
 `roles/_template` is a non-deployed template that follows the current Saltbox role conventions.
 
-Copy it:
+Copy it and replace the placeholder name:
 
 ```bash
 cd /opt/saltbox_mod
-cp -a roles/_template roles/appname
-find roles/appname -type f -exec sed -i 's/appname/yourapp/g' {} +
+APP=kkrepo
+cp -a roles/_template "roles/$APP"
+find "roles/$APP" -type f -exec sed -i "s/appname/$APP/g" {} +
 ```
 
 Then adjust at least:
@@ -66,6 +67,7 @@ Then adjust at least:
 - web port
 - environment variables
 - volume mounts
+- host-published ports, if required
 - Traefik/API settings if required
 - any additional directories, networks, devices, capabilities or commands
 
