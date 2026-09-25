@@ -2,7 +2,7 @@
 
 Custom Saltbox-compatible Ansible roles for my Saltbox host.
 
-This repository is based on [`saltyorg/saltbox_mod`](https://github.com/saltyorg/saltbox_mod) and is intended to hold only locally maintained roles. Host-specific values and secrets belong in the Saltbox Inventory, not in this repository.
+This repository is based on [`saltyorg/saltbox_mod`](https://github.com/saltyorg/saltbox_mod) and is intended to hold only locally maintained roles. Host-specific values and secrets belong in the Saltbox Inventory or Saltbox facts, not in this repository.
 
 ## Connect Saltbox to this fork
 
@@ -22,6 +22,19 @@ sb install saltbox-mod
 
 For this repository, GitHub is intended to be the source of truth. Keeping `saltbox_mod_force_overwrite: true` means rerunning `sb install saltbox-mod` refreshes `/opt/saltbox_mod` from this fork. Do not keep uncommitted local changes in `/opt/saltbox_mod`, because they may be overwritten by the sync.
 
+## kkRepo
+
+The kkRepo role is registered and can be installed with:
+
+```bash
+sb install saltbox-mod
+sb install mod-kkrepo
+```
+
+It uses `ghcr.io/klboke/kkrepo:latest`, deploys a private MySQL 8.0 companion container and persists application data under the normal Saltbox appdata path.
+
+On a new installation, database and application secrets are generated once and persisted with Saltbox facts. Existing secrets can instead be imported through the Inventory on the first run. See [`roles/kkrepo/README.md`](roles/kkrepo/README.md) before migrating an existing installation.
+
 ## Installing a custom role
 
 Every real role must be registered in `saltbox_mod.yml`:
@@ -34,12 +47,6 @@ Deploy it with:
 
 ```bash
 sb install mod-appname
-```
-
-For example, a future `kkrepo` role will be installed with:
-
-```bash
-sb install mod-kkrepo
 ```
 
 When the role was changed on GitHub, sync the fork first and then deploy the role:
@@ -57,7 +64,7 @@ Copy it and replace the placeholder name:
 
 ```bash
 cd /opt/saltbox_mod
-APP=kkrepo
+APP=myapp
 cp -a roles/_template "roles/$APP"
 find "roles/$APP" -type f -exec sed -i "s/appname/$APP/g" {} +
 ```
@@ -94,7 +101,10 @@ saltbox_mod.yml          # playbook and role registration
 settings.yml             # legacy compatibility; Inventory is preferred
 roles/
   _template/             # copy-only role template, not deployed
-  <app>/                 # actual custom roles
+  kkrepo/                # kkRepo + MySQL role
+  <app>/                 # other custom roles
+examples/
+  kkrepo/                # standalone Compose reference
 ```
 
 ## Updating containers
@@ -105,4 +115,4 @@ Running a role again causes Saltbox to pull the configured image when `*_role_do
 sb install mod-appname
 ```
 
-Automatic image monitoring/updating is separate from the role itself. Saltbox provides Diun for update notifications, while tools such as Dockwatch can manage updates when explicitly configured with the required Docker socket permissions.
+Automatic image monitoring/updating is separate from the role itself. Saltbox provides Diun for update notifications, while Dockwatch can manage actual updates when explicitly configured with the required Docker socket permissions.
