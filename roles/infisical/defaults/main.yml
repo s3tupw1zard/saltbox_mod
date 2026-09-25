@@ -1,0 +1,204 @@
+#########################################################################
+# Title:         Saltbox Mod: Infisical Role Defaults                   #
+# Author(s):     s3tupw1zard                                            #
+# URL:           https://github.com/s3tupw1zard/saltbox_mod             #
+# --                                                                    #
+#########################################################################
+#                   GNU General Public License v3.0                     #
+#########################################################################
+---
+################################
+# Basics
+################################
+
+infisical_name: infisical
+infisical_db_name: infisical-db
+infisical_redis_name: infisical-dev-redis
+
+################################
+# Paths
+################################
+
+infisical_role_paths_folder: "{{ infisical_name }}"
+infisical_role_paths_location: "{{ server_appdata_path }}/{{ infisical_role_paths_folder }}"
+infisical_role_paths_pg_data_location: "{{ infisical_role_paths_location }}/pg_data"
+infisical_role_paths_redis_data_location: "{{ infisical_role_paths_location }}/redis_data"
+infisical_role_paths_env_file: "{{ infisical_role_paths_location }}/.env"
+infisical_role_paths_env_example: "{{ infisical_role_paths_location }}/.env.example"
+infisical_role_paths_folders_list:
+  - "{{ infisical_role_paths_location }}"
+  - "{{ infisical_role_paths_pg_data_location }}"
+  - "{{ infisical_role_paths_redis_data_location }}"
+
+################################
+# Web
+################################
+
+infisical_role_web_subdomain: "{{ infisical_name }}"
+infisical_role_web_domain: "{{ user.domain }}"
+infisical_role_web_port: "8080"
+infisical_role_web_url: "{{ lookup('role_web', role='infisical', scheme='https') }}"
+
+################################
+# DNS
+################################
+
+infisical_role_dns_record: "{{ lookup('role_var', '_web_subdomain', role='infisical') }}"
+infisical_role_dns_zone: "{{ lookup('role_var', '_web_domain', role='infisical') }}"
+infisical_role_dns_proxy: "{{ dns_proxied }}"
+
+################################
+# Traefik
+################################
+
+# Infisical has its own authentication and API clients. External Saltbox SSO
+# is therefore disabled by default.
+infisical_role_traefik_sso_middleware: ""
+infisical_role_traefik_middleware_default: "{{ traefik_default_middleware }}"
+infisical_role_traefik_middleware_custom: ""
+infisical_role_traefik_middleware_default_api: "{{ traefik_default_middleware_api }}"
+infisical_role_traefik_middleware_custom_api: ""
+infisical_role_traefik_certresolver: "{{ traefik_default_certresolver }}"
+infisical_role_traefik_enabled: true
+infisical_role_traefik_api_enabled: false
+infisical_role_traefik_api_endpoint: ""
+
+################################
+# Private Docker network
+################################
+
+infisical_role_docker_network_private: infisical
+
+################################
+# Docker - Infisical backend
+################################
+
+# Container
+infisical_role_docker_container: infisical-backend
+
+# Image
+infisical_role_docker_image_pull: true
+infisical_role_docker_image_repo: infisical/infisical
+infisical_role_docker_image_tag: latest
+infisical_role_docker_image: "{{ lookup('role_var', '_docker_image_repo', role='infisical') }}:{{ lookup('role_var', '_docker_image_tag', role='infisical') }}"
+
+# Environment
+# Secrets and integration credentials stay in the external .env file.
+infisical_role_docker_env_file: "{{ lookup('role_var', '_paths_env_file', role='infisical') }}"
+infisical_role_docker_envs_default:
+  TZ: "{{ tz }}"
+  NODE_ENV: production
+  SITE_URL: "{{ infisical_role_web_url }}"
+  PORT: "{{ infisical_role_web_port }}"
+infisical_role_docker_envs_custom: {}
+infisical_role_docker_envs: "{{ lookup('role_var', '_docker_envs_default', role='infisical')
+                                | combine(lookup('role_var', '_docker_envs_custom', role='infisical')) }}"
+
+# Hostname
+infisical_role_docker_hostname: infisical-backend
+
+# Networks
+infisical_role_docker_networks_alias: infisical-backend
+infisical_role_docker_networks_default:
+  - name: "{{ infisical_role_docker_network_private }}"
+    aliases:
+      - backend
+      - infisical-backend
+infisical_role_docker_networks_custom: []
+infisical_role_docker_networks: "{{ docker_networks_common
+                                    + lookup('role_var', '_docker_networks_default', role='infisical')
+                                    + lookup('role_var', '_docker_networks_custom', role='infisical') }}"
+
+# Restart policy
+infisical_role_docker_restart_policy: unless-stopped
+
+################################
+# Docker - Redis
+################################
+
+# Container
+infisical_redis_role_docker_container: "{{ infisical_redis_name }}"
+
+# Image
+infisical_redis_role_docker_image_pull: true
+infisical_redis_role_docker_image_repo: redis
+infisical_redis_role_docker_image_tag: latest
+infisical_redis_role_docker_image: "{{ infisical_redis_role_docker_image_repo }}:{{ infisical_redis_role_docker_image_tag }}"
+
+# Environment
+infisical_redis_role_docker_env_file: "{{ infisical_role_paths_env_file }}"
+infisical_redis_role_docker_envs:
+  TZ: "{{ tz }}"
+  ALLOW_EMPTY_PASSWORD: "yes"
+
+# Volumes
+infisical_redis_role_docker_volumes:
+  - "{{ infisical_role_paths_redis_data_location }}:/data"
+
+# Labels
+infisical_redis_role_docker_labels_use_common: false
+infisical_redis_role_docker_labels: {}
+
+# Hostname
+infisical_redis_role_docker_hostname: "{{ infisical_redis_name }}"
+
+# Networks
+infisical_redis_role_docker_network_mode: "{{ infisical_role_docker_network_private }}"
+infisical_redis_role_docker_networks:
+  - name: "{{ infisical_role_docker_network_private }}"
+    aliases:
+      - redis
+      - "{{ infisical_redis_name }}"
+
+# Restart policy
+infisical_redis_role_docker_restart_policy: always
+
+################################
+# Docker - PostgreSQL
+################################
+
+# Container
+infisical_db_role_docker_container: "{{ infisical_db_name }}"
+
+# Image
+infisical_db_role_docker_image_pull: true
+infisical_db_role_docker_image_repo: postgres
+infisical_db_role_docker_image_tag: 14-alpine
+infisical_db_role_docker_image: "{{ infisical_db_role_docker_image_repo }}:{{ infisical_db_role_docker_image_tag }}"
+
+# Environment
+infisical_db_role_docker_env_file: "{{ infisical_role_paths_env_file }}"
+infisical_db_role_docker_envs:
+  TZ: "{{ tz }}"
+
+# Volumes
+infisical_db_role_docker_volumes:
+  - "{{ infisical_role_paths_pg_data_location }}:/var/lib/postgresql/data"
+
+# Labels
+infisical_db_role_docker_labels_use_common: false
+infisical_db_role_docker_labels: {}
+
+# Hostname
+infisical_db_role_docker_hostname: "{{ infisical_db_name }}"
+
+# Networks
+infisical_db_role_docker_network_mode: "{{ infisical_role_docker_network_private }}"
+infisical_db_role_docker_networks:
+  - name: "{{ infisical_role_docker_network_private }}"
+    aliases:
+      - db
+      - "{{ infisical_db_name }}"
+
+# Healthcheck
+infisical_db_role_docker_healthcheck:
+  test:
+    - CMD-SHELL
+    - 'pg_isready --username="$POSTGRES_USER" && psql --username="$POSTGRES_USER" --list'
+  interval: 5s
+  timeout: 10s
+  retries: 10
+  start_period: 10s
+
+# Restart policy
+infisical_db_role_docker_restart_policy: always
