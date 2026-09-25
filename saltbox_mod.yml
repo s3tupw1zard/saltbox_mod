@@ -13,6 +13,5 @@
     - { role: pre_tasks, tags: ['always', 'pre_tasks'] }
 
     # Custom Apps Start
-    # Add custom roles here, for example:
-    # - { role: kkrepo, tags: ['kkrepo'] }
+    - { role: kkrepo, tags: ['kkrepo'] }
     # Custom Apps End
