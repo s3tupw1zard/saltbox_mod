@@ -35,6 +35,19 @@ It uses `ghcr.io/klboke/kkrepo:latest`, deploys a private MySQL 8.0 companion co
 
 On a new installation, database and application secrets are generated once and persisted with Saltbox facts. Existing secrets can instead be imported through the Inventory on the first run. See [`roles/kkrepo/README.md`](roles/kkrepo/README.md) before migrating an existing installation.
 
+## Infisical
+
+The Infisical role is registered and can be installed with:
+
+```bash
+sb install saltbox-mod
+sb install mod-infisical
+```
+
+It deploys `infisical/infisical:latest` together with private PostgreSQL 14 and Redis containers. The backend is exposed through the normal Saltbox Traefik/DNS integration, while PostgreSQL and Redis remain on a private Docker network.
+
+Application secrets and integration credentials remain in the external Infisical `.env` file under the normal appdata path. The role never writes secret values to this repository and does not overwrite an existing `.env`. See [`roles/infisical/README.md`](roles/infisical/README.md) for migration and first-install instructions.
+
 ## Installing a custom role
 
 Every real role must be registered in `saltbox_mod.yml`:
@@ -102,6 +115,7 @@ settings.yml             # legacy compatibility; Inventory is preferred
 roles/
   _template/             # copy-only role template, not deployed
   kkrepo/                # kkRepo + MySQL role
+  infisical/             # Infisical + PostgreSQL + Redis role
   <app>/                 # other custom roles
 examples/
   kkrepo/                # standalone Compose reference
