@@ -1,0 +1,88 @@
+---
+################################
+# Basics
+################################
+
+appname_name: appname
+
+################################
+# Paths
+################################
+
+appname_role_paths_folder: "{{ appname_name }}"
+appname_role_paths_location: "{{ server_appdata_path }}/{{ appname_role_paths_folder }}"
+appname_role_paths_folders_list:
+  - "{{ appname_role_paths_location }}"
+
+################################
+# Web
+################################
+
+appname_role_web_subdomain: "{{ appname_name }}"
+appname_role_web_domain: "{{ user.domain }}"
+appname_role_web_port: "8080"
+appname_role_web_url: "{{ lookup('role_web', role='appname', scheme='https') }}"
+
+################################
+# DNS
+################################
+
+appname_role_dns_record: "{{ lookup('role_var', '_web_subdomain', role='appname') }}"
+appname_role_dns_zone: "{{ lookup('role_var', '_web_domain', role='appname') }}"
+appname_role_dns_proxy: "{{ dns_proxied }}"
+
+################################
+# Traefik
+################################
+
+appname_role_traefik_sso_middleware: "{{ traefik_default_sso_middleware }}"
+appname_role_traefik_middleware_default: "{{ traefik_default_middleware }}"
+appname_role_traefik_middleware_custom: ""
+appname_role_traefik_middleware_default_api: "{{ traefik_default_middleware_api }}"
+appname_role_traefik_middleware_custom_api: ""
+appname_role_traefik_certresolver: "{{ traefik_default_certresolver }}"
+appname_role_traefik_enabled: true
+appname_role_traefik_api_enabled: false
+appname_role_traefik_api_endpoint: ""
+
+################################
+# Docker
+################################
+
+# Container
+appname_role_docker_container: "{{ appname_name }}"
+
+# Image
+appname_role_docker_image_pull: true
+appname_role_docker_image_repo: "ghcr.io/example/appname"
+appname_role_docker_image_tag: "latest"
+appname_role_docker_image: "{{ lookup('role_var', '_docker_image_repo', role='appname') }}:{{ lookup('role_var', '_docker_image_tag', role='appname') }}"
+
+# Environment
+# Only add variables supported by the image. PUID/PGID are not universal.
+appname_role_docker_envs_default:
+  TZ: "{{ tz }}"
+appname_role_docker_envs_custom: {}
+appname_role_docker_envs: "{{ lookup('role_var', '_docker_envs_default', role='appname')
+                              | combine(lookup('role_var', '_docker_envs_custom', role='appname')) }}"
+
+# Volumes
+appname_role_docker_volumes_default:
+  - "{{ lookup('role_var', '_paths_location', role='appname') }}:/config"
+appname_role_docker_volumes_custom: []
+appname_role_docker_volumes: "{{ lookup('role_var', '_docker_volumes_default', role='appname')
+                                 + lookup('role_var', '_docker_volumes_custom', role='appname') }}"
+
+# Hostname
+appname_role_docker_hostname: "{{ appname_name }}"
+
+# Networks
+appname_role_docker_networks_alias: "{{ appname_name }}"
+appname_role_docker_networks_default: []
+appname_role_docker_networks_custom: []
+appname_role_docker_networks: "{{ docker_networks_common
+                                  + lookup('role_var', '_docker_networks_default', role='appname')
+                                  + lookup('role_var', '_docker_networks_custom', role='appname') }}"
+
+# Restart policy
+appname_role_docker_restart_policy: unless-stopped
