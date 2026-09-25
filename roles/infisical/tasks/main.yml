@@ -1,0 +1,79 @@
+#########################################################################
+# Title:         Saltbox Mod: Infisical Role                            #
+# Author(s):     s3tupw1zard                                            #
+# URL:           https://github.com/s3tupw1zard/saltbox_mod             #
+# --                                                                    #
+#########################################################################
+#                   GNU General Public License v3.0                     #
+#########################################################################
+---
+- name: Create Infisical directories
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/directories/create_directories.yml"
+
+- name: Install Infisical environment example
+  ansible.builtin.copy:
+    src: .env.example
+    dest: "{{ infisical_role_paths_env_example }}"
+    owner: "{{ user.name }}"
+    group: "{{ user.name }}"
+    mode: "0600"
+    force: false
+
+- name: Check for Infisical environment file
+  ansible.builtin.stat:
+    path: "{{ infisical_role_paths_env_file }}"
+  register: infisical_env_file
+
+- name: Require Infisical environment file
+  ansible.builtin.fail:
+    msg: >-
+      Infisical requires {{ infisical_role_paths_env_file }}.
+      Copy {{ infisical_role_paths_env_example }} to .env and populate the
+      required values, or keep the .env from an existing installation.
+      The Saltbox mod intentionally does not generate or overwrite Infisical
+      application secrets.
+  when: not infisical_env_file.stat.exists
+
+- name: Create Infisical private Docker network
+  community.docker.docker_network:
+    name: "{{ infisical_role_docker_network_private }}"
+    state: present
+
+- name: Remove existing Infisical Docker containers
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/remove_docker_container.yml"
+  vars:
+    container_name: "{{ item }}"
+  loop:
+    - "{{ infisical_role_docker_container }}"
+    - "{{ infisical_redis_name }}"
+    - "{{ infisical_db_name }}"
+
+- name: Add Infisical DNS record
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/dns/tasker.yml"
+  vars:
+    dns_record: "{{ lookup('role_var', '_dns_record', role='infisical') }}"
+    dns_zone: "{{ lookup('role_var', '_dns_zone', role='infisical') }}"
+    dns_proxy: "{{ lookup('role_var', '_dns_proxy', role='infisical') }}"
+
+- name: Create Infisical Redis container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
+  vars:
+    var_prefix: infisical_redis
+
+- name: Create Infisical PostgreSQL container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
+  vars:
+    var_prefix: infisical_db
+
+- name: Wait for Infisical PostgreSQL to become healthy
+  community.docker.docker_container_info:
+    name: "{{ infisical_db_name }}"
+  register: infisical_db_container_info
+  retries: 24
+  delay: 5
+  until:
+    - infisical_db_container_info.exists
+    - infisical_db_container_info.container.State.Health.Status == 'healthy'
+
+- name: Create Infisical backend container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
