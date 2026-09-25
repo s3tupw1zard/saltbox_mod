@@ -58,6 +58,13 @@ appname_role_docker_image_repo: "ghcr.io/example/appname"
 appname_role_docker_image_tag: "latest"
 appname_role_docker_image: "{{ lookup('role_var', '_docker_image_repo', role='appname') }}:{{ lookup('role_var', '_docker_image_tag', role='appname') }}"
 
+# Ports
+# Leave empty for normal Traefik-only web apps. Add host-published ports only when needed.
+appname_role_docker_ports_default: []
+appname_role_docker_ports_custom: []
+appname_role_docker_ports: "{{ lookup('role_var', '_docker_ports_default', role='appname')
+                               + lookup('role_var', '_docker_ports_custom', role='appname') }}"
+
 # Environment
 # Only add variables supported by the image. PUID/PGID are not universal.
 appname_role_docker_envs_default:
