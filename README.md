@@ -20,13 +20,7 @@ Then run:
 sb install saltbox-mod
 ```
 
-After the first successful switch to this fork, set:
-
-```yaml
-saltbox_mod_force_overwrite: false
-```
-
-The repository is installed to `/opt/saltbox_mod` by Saltbox.
+For this repository, GitHub is intended to be the source of truth. Keeping `saltbox_mod_force_overwrite: true` means rerunning `sb install saltbox-mod` refreshes `/opt/saltbox_mod` from this fork. Do not keep uncommitted local changes in `/opt/saltbox_mod`, because they may be overwritten by the sync.
 
 ## Installing a custom role
 
@@ -46,6 +40,13 @@ For example, a future `kkrepo` role will be installed with:
 
 ```bash
 sb install mod-kkrepo
+```
+
+When the role was changed on GitHub, sync the fork first and then deploy the role:
+
+```bash
+sb install saltbox-mod
+sb install mod-appname
 ```
 
 ## Creating a role
