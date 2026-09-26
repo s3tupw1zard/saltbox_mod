@@ -12,17 +12,6 @@
     path: "{{ lookup('role_var', '_paths_config_location', role='technitium') }}/dns.config"
   register: technitium_config
 
-- name: Load existing Technitium Saltbox facts
-  saltbox_facts:
-    role: technitium
-    instance: technitium
-    owner: "{{ user.name }}"
-    group: "{{ user.name }}"
-    mode: "0600"
-    base_path: "{{ server_appdata_path }}"
-  register: technitium_existing_saltbox_facts
-  no_log: true
-
 - name: Persist Technitium PKCS#12 password
   saltbox_facts:
     role: technitium
@@ -134,13 +123,16 @@
       TECHNITIUM_ACME_SERVER={{ lookup('role_var', '_acme_server', role='technitium') }}
       TECHNITIUM_ACME_DNS_PROVIDER={{ lookup('role_var', '_acme_dns_provider', role='technitium') }}
       TECHNITIUM_ACME_KEY_LENGTH={{ lookup('role_var', '_acme_key_length', role='technitium') }}
+      TECHNITIUM_ACME_EXPORT_DIR=/acme.sh/export
       TECHNITIUM_PFX_PASSWORD={{ technitium_tls_saltbox_facts.facts.tls_pfx_password }}
       TECHNITIUM_PFX_TARGET=/certs/dns.pfx
+      {% if lookup('role_var', '_acme_dns_provider', role='technitium') == 'dns_cf' %}
       {% if cloudflare_scoped_token_is_enabled %}
       CF_Token={{ cloudflare_scoped_token }}
       {% elif cloudflare_api_key_is_enabled %}
       CF_Key={{ cloudflare_api_key }}
       CF_Email={{ cloudflare_email }}
+      {% endif %}
       {% endif %}
       {% for item in lookup('role_var', '_acme_envs_custom', role='technitium') | dict2items %}
       {{ item.key }}={{ item.value }}
