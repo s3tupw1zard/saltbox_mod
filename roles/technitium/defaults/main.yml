@@ -26,6 +26,13 @@ technitium_role_admin_password: ""
 # Override this with a LAN/NetBird address when DNS should not be public.
 technitium_role_dns_bind_ip: "0.0.0.0"
 
+# Classic DNS listener publishing. Defaults preserve the normal DNS service on
+# host port 53. Override only the host port when another local service already
+# owns port 53; the container-side DNS port normally stays at 53.
+technitium_role_dns_enabled: true
+technitium_role_dns_host_port: "53"
+technitium_role_dns_port: "53"
+
 # DNS service hostname. The Saltbox domain is used by default, while both the
 # record and zone remain independently overridable for this role.
 technitium_role_service_dns_record: "dns"
@@ -129,13 +136,18 @@ technitium_role_docker_image: "{{ lookup('role_var', '_docker_image_repo', role=
 
 # Ports
 # The web UI remains internal to the common Docker network for Traefik.
-# Standard DNS is always published; DoT/DoQ follow their feature flags.
+# Classic DNS can be disabled or mapped to another host port; DoT/DoQ follow
+# their own feature flags.
 technitium_role_docker_ports_default: >-
   {{
-    [
-      (lookup('role_var', '_dns_bind_ip', role='technitium') | string) + ':53:53/udp',
-      (lookup('role_var', '_dns_bind_ip', role='technitium') | string) + ':53:53/tcp'
-    ]
+    ([
+      (lookup('role_var', '_dns_bind_ip', role='technitium') | string)
+      + ':' + (lookup('role_var', '_dns_host_port', role='technitium') | string)
+      + ':' + (lookup('role_var', '_dns_port', role='technitium') | string) + '/udp',
+      (lookup('role_var', '_dns_bind_ip', role='technitium') | string)
+      + ':' + (lookup('role_var', '_dns_host_port', role='technitium') | string)
+      + ':' + (lookup('role_var', '_dns_port', role='technitium') | string) + '/tcp'
+    ] if (lookup('role_var', '_dns_enabled', role='technitium') | bool) else [])
     + ([
         (lookup('role_var', '_dns_bind_ip', role='technitium') | string)
         + ':' + (lookup('role_var', '_doq_port', role='technitium') | string)
