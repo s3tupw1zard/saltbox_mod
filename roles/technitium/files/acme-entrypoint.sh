@@ -5,6 +5,7 @@ set -eu
 : "${TECHNITIUM_ACME_SERVER:?TECHNITIUM_ACME_SERVER is required}"
 : "${TECHNITIUM_ACME_DNS_PROVIDER:?TECHNITIUM_ACME_DNS_PROVIDER is required}"
 : "${TECHNITIUM_ACME_KEY_LENGTH:?TECHNITIUM_ACME_KEY_LENGTH is required}"
+: "${TECHNITIUM_ACME_EXPORT_DIR:?TECHNITIUM_ACME_EXPORT_DIR is required}"
 : "${TECHNITIUM_PFX_PASSWORD:?TECHNITIUM_PFX_PASSWORD is required}"
 : "${TECHNITIUM_PFX_TARGET:?TECHNITIUM_PFX_TARGET is required}"
 
@@ -18,6 +19,8 @@ case "${TECHNITIUM_ACME_KEY_LENGTH}" in
     ecc_arg=""
     ;;
 esac
+
+mkdir -p "${TECHNITIUM_ACME_EXPORT_DIR}"
 
 acme.sh --set-default-ca --server "${TECHNITIUM_ACME_SERVER}"
 
@@ -35,24 +38,21 @@ if [ ! -s "${cert_dir}/${TECHNITIUM_ACME_DOMAIN}.conf" ]; then
     --keylength "${TECHNITIUM_ACME_KEY_LENGTH}"
 fi
 
+install_cert() {
+  acme.sh --install-cert \
+    -d "${TECHNITIUM_ACME_DOMAIN}" \
+    "$@" \
+    --cert-file "${TECHNITIUM_ACME_EXPORT_DIR}/cert.pem" \
+    --key-file "${TECHNITIUM_ACME_EXPORT_DIR}/key.pem" \
+    --ca-file "${TECHNITIUM_ACME_EXPORT_DIR}/ca.pem" \
+    --fullchain-file "${TECHNITIUM_ACME_EXPORT_DIR}/fullchain.pem" \
+    --reloadcmd "/opt/technitium-acme/deploy-pfx.sh"
+}
+
 if [ -n "${ecc_arg}" ]; then
-  acme.sh --to-pkcs12 \
-    -d "${TECHNITIUM_ACME_DOMAIN}" \
-    --ecc \
-    --password "${TECHNITIUM_PFX_PASSWORD}"
-
-  acme.sh --install-cert \
-    -d "${TECHNITIUM_ACME_DOMAIN}" \
-    --ecc \
-    --reloadcmd "/opt/technitium-acme/deploy-pfx.sh"
+  install_cert --ecc
 else
-  acme.sh --to-pkcs12 \
-    -d "${TECHNITIUM_ACME_DOMAIN}" \
-    --password "${TECHNITIUM_PFX_PASSWORD}"
-
-  acme.sh --install-cert \
-    -d "${TECHNITIUM_ACME_DOMAIN}" \
-    --reloadcmd "/opt/technitium-acme/deploy-pfx.sh"
+  install_cert
 fi
 
 exec /entry.sh daemon
