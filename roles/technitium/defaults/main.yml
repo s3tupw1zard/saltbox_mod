@@ -176,6 +176,9 @@ technitium_role_docker_volumes: "{{ lookup('role_var', '_docker_volumes_default'
 technitium_role_docker_hostname: "{{ technitium_name }}"
 
 # Networks
+# Explicitly keep Technitium on the shared Saltbox network so Traefik can
+# reach the internal web console on port 5380.
+technitium_role_docker_network_mode: "{{ docker_networks_name_common }}"
 technitium_role_docker_networks_alias: "{{ technitium_name }}"
 technitium_role_docker_networks_default: []
 technitium_role_docker_networks_custom: []
@@ -239,6 +242,7 @@ technitium_acme_role_docker_labels: {}
 technitium_acme_role_docker_hostname: "{{ technitium_acme_name }}"
 
 # Networks
+technitium_acme_role_docker_network_mode: "{{ docker_networks_name_common }}"
 technitium_acme_role_docker_networks_alias: "{{ technitium_acme_name }}"
 technitium_acme_role_docker_networks: "{{ docker_networks_common }}"
 
