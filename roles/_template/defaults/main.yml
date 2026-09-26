@@ -84,6 +84,9 @@ appname_role_docker_volumes: "{{ lookup('role_var', '_docker_volumes_default', r
 appname_role_docker_hostname: "{{ appname_name }}"
 
 # Networks
+# Explicitly keep normal Saltbox web roles on the shared Saltbox network so
+# Traefik can reach their internal web port.
+appname_role_docker_network_mode: "{{ docker_networks_name_common }}"
 appname_role_docker_networks_alias: "{{ appname_name }}"
 appname_role_docker_networks_default: []
 appname_role_docker_networks_custom: []
