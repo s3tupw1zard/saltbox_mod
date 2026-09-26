@@ -129,12 +129,24 @@ technitium_role_docker_image: "{{ lookup('role_var', '_docker_image_repo', role=
 
 # Ports
 # The web UI remains internal to the common Docker network for Traefik.
-# Standard DNS, DoT and DoQ are published directly on the selected host IP.
-technitium_role_docker_ports_default:
-  - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:53:53/udp"
-  - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:53:53/tcp"
-  - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:{{ lookup('role_var', '_doq_port', role='technitium') }}:{{ lookup('role_var', '_doq_port', role='technitium') }}/udp"
-  - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:{{ lookup('role_var', '_dot_port', role='technitium') }}:{{ lookup('role_var', '_dot_port', role='technitium') }}/tcp"
+# Standard DNS is always published; DoT/DoQ follow their feature flags.
+technitium_role_docker_ports_default: >-
+  {{
+    [
+      (lookup('role_var', '_dns_bind_ip', role='technitium') | string) + ':53:53/udp',
+      (lookup('role_var', '_dns_bind_ip', role='technitium') | string) + ':53:53/tcp'
+    ]
+    + ([
+        (lookup('role_var', '_dns_bind_ip', role='technitium') | string)
+        + ':' + (lookup('role_var', '_doq_port', role='technitium') | string)
+        + ':' + (lookup('role_var', '_doq_port', role='technitium') | string) + '/udp'
+      ] if (lookup('role_var', '_doq_enabled', role='technitium') | bool) else [])
+    + ([
+        (lookup('role_var', '_dns_bind_ip', role='technitium') | string)
+        + ':' + (lookup('role_var', '_dot_port', role='technitium') | string)
+        + ':' + (lookup('role_var', '_dot_port', role='technitium') | string) + '/tcp'
+      ] if (lookup('role_var', '_dot_enabled', role='technitium') | bool) else [])
+  }}
 technitium_role_docker_ports_custom: []
 technitium_role_docker_ports: "{{ lookup('role_var', '_docker_ports_default', role='technitium')
                                  + lookup('role_var', '_docker_ports_custom', role='technitium') }}"
