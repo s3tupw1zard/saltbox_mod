@@ -1,21 +1,32 @@
 #!/usr/bin/env sh
 set -eu
 
-: "${TECHNITIUM_ACME_DOMAIN:?TECHNITIUM_ACME_DOMAIN is required}"
+: "${TECHNITIUM_ACME_EXPORT_DIR:?TECHNITIUM_ACME_EXPORT_DIR is required}"
+: "${TECHNITIUM_PFX_PASSWORD:?TECHNITIUM_PFX_PASSWORD is required}"
 : "${TECHNITIUM_PFX_TARGET:?TECHNITIUM_PFX_TARGET is required}"
-: "${CERT_PATH:?CERT_PATH is required by the acme.sh reload hook}"
 
-source_pfx="$(dirname "${CERT_PATH}")/${TECHNITIUM_ACME_DOMAIN}.pfx"
+cert_file="${TECHNITIUM_ACME_EXPORT_DIR}/cert.pem"
+key_file="${TECHNITIUM_ACME_EXPORT_DIR}/key.pem"
+ca_file="${TECHNITIUM_ACME_EXPORT_DIR}/ca.pem"
 target_dir="$(dirname "${TECHNITIUM_PFX_TARGET}")"
 tmp_pfx="${TECHNITIUM_PFX_TARGET}.tmp"
 
-if [ ! -s "${source_pfx}" ]; then
-  echo "Technitium ACME deploy hook: PKCS#12 file not found: ${source_pfx}" >&2
-  exit 1
-fi
+for file in "${cert_file}" "${key_file}" "${ca_file}"; do
+  if [ ! -s "${file}" ]; then
+    echo "Technitium ACME deploy hook: required certificate file missing: ${file}" >&2
+    exit 1
+  fi
+done
 
 mkdir -p "${target_dir}"
-cp "${source_pfx}" "${tmp_pfx}"
+
+openssl pkcs12 -export \
+  -out "${tmp_pfx}" \
+  -inkey "${key_file}" \
+  -in "${cert_file}" \
+  -certfile "${ca_file}" \
+  -passout "pass:${TECHNITIUM_PFX_PASSWORD}"
+
 chmod 0600 "${tmp_pfx}"
 mv -f "${tmp_pfx}" "${TECHNITIUM_PFX_TARGET}"
 
