@@ -48,6 +48,19 @@ It deploys `infisical/infisical:latest` together with private PostgreSQL 14 and 
 
 Application secrets and integration credentials remain in the external Infisical `.env` file under the normal appdata path. The role never writes secret values to this repository and does not overwrite an existing `.env`. See [`roles/infisical/README.md`](roles/infisical/README.md) for migration and first-install instructions.
 
+## Technitium DNS Server
+
+The Technitium role is registered and can be installed with:
+
+```bash
+sb install saltbox-mod
+sb install mod-technitium
+```
+
+It uses the official `docker.io/technitium/dns-server:latest` image. The web console is exposed through Saltbox Traefik at `technitium.<domain>`, while the DNS service is published on TCP/UDP port 53 and gets a separate unproxied `dns.<domain>` record.
+
+On a fresh installation, the role generates a random Technitium admin password and persists it with Saltbox facts instead of leaving the upstream default credentials active. See [`roles/technitium/README.md`](roles/technitium/README.md) for the generated password location, DNS bind-address overrides, port-53 considerations and encrypted-DNS options.
+
 ## Installing a custom role
 
 Every real role must be registered in `saltbox_mod.yml`:
@@ -116,6 +129,7 @@ roles/
   _template/             # copy-only role template, not deployed
   kkrepo/                # kkRepo + MySQL role
   infisical/             # Infisical + PostgreSQL + Redis role
+  technitium/            # Technitium DNS Server role
   <app>/                 # other custom roles
 examples/
   kkrepo/                # standalone Compose reference
