@@ -12,6 +12,7 @@
 ################################
 
 technitium_name: technitium
+technitium_acme_name: "{{ technitium_name }}-acme"
 
 ################################
 # Settings
@@ -21,17 +22,43 @@ technitium_name: technitium
 # Leave empty to generate and persist a random password with saltbox_facts.
 technitium_role_admin_password: ""
 
-# Address on the Saltbox host where plain DNS is published.
+# Address on the Saltbox host where DNS services are published.
 # Override this with a LAN/NetBird address when DNS should not be public.
 technitium_role_dns_bind_ip: "0.0.0.0"
 
-# Separate service hostname for DNS clients. This record is intentionally
-# unproxied because normal DNS traffic on port 53 cannot pass through the
-# Cloudflare HTTP proxy.
+# DNS service hostname. The Saltbox domain is used by default, while both the
+# record and zone remain independently overridable for this role.
 technitium_role_service_dns_record: "dns"
 technitium_role_service_dns_zone: "{{ user.domain }}"
 technitium_role_service_dns_proxy: false
-technitium_role_server_domain: "{{ lookup('role_var', '_service_dns_record', role='technitium') }}.{{ lookup('role_var', '_service_dns_zone', role='technitium') }}"
+technitium_role_service_dns_fqdn: "{{ lookup('role_var', '_service_dns_record', role='technitium') }}.{{ lookup('role_var', '_service_dns_zone', role='technitium') }}"
+technitium_role_server_domain: "{{ lookup('role_var', '_service_dns_fqdn', role='technitium') }}"
+
+# Encrypted DNS defaults. Technitium itself terminates DoT and DoQ.
+technitium_role_dot_enabled: true
+technitium_role_dot_port: "853"
+technitium_role_doq_enabled: true
+technitium_role_doq_port: "853"
+
+################################
+# ACME / TLS
+################################
+
+# A dedicated acme.sh companion issues the certificate used by Technitium for
+# encrypted DNS. It does not expose ports and is independent from Traefik ACME.
+technitium_role_acme_enabled: true
+technitium_role_acme_email: "{{ user.email }}"
+technitium_role_acme_server: "letsencrypt"
+technitium_role_acme_dns_provider: "dns_cf"
+technitium_role_acme_key_length: "ec-256"
+
+# Leave empty to generate and persist a random PKCS#12 password with
+# saltbox_facts. This password is independent from the Technitium admin login.
+technitium_role_acme_pfx_password: ""
+
+# Provider-specific environment variables can be supplied here. Cloudflare is
+# special-cased by tasks/main.yml and automatically reuses Saltbox credentials.
+technitium_role_acme_envs_custom: {}
 
 ################################
 # Paths
@@ -41,10 +68,19 @@ technitium_role_paths_folder: "{{ technitium_name }}"
 technitium_role_paths_location: "{{ server_appdata_path }}/{{ technitium_role_paths_folder }}"
 technitium_role_paths_config_location: "{{ technitium_role_paths_location }}/config"
 technitium_role_paths_logs_location: "{{ technitium_role_paths_location }}/logs"
+technitium_role_paths_tls_location: "{{ technitium_role_paths_location }}/tls"
+technitium_role_paths_acme_location: "{{ technitium_role_paths_location }}/acme"
+technitium_role_paths_acme_env: "{{ technitium_role_paths_location }}/acme.env"
+technitium_role_paths_acme_entrypoint: "{{ technitium_role_paths_location }}/acme-entrypoint.sh"
+technitium_role_paths_acme_deploy: "{{ technitium_role_paths_location }}/acme-deploy-pfx.sh"
+technitium_role_paths_tls_pfx: "{{ technitium_role_paths_tls_location }}/dns.pfx"
+technitium_role_tls_pfx_container_path: "/etc/dns/tls/dns.pfx"
 technitium_role_paths_folders_list:
   - "{{ technitium_role_paths_location }}"
   - "{{ technitium_role_paths_config_location }}"
   - "{{ technitium_role_paths_logs_location }}"
+  - "{{ technitium_role_paths_tls_location }}"
+  - "{{ technitium_role_paths_acme_location }}"
 
 ################################
 # Web
@@ -52,6 +88,7 @@ technitium_role_paths_folders_list:
 
 technitium_role_web_subdomain: "{{ technitium_name }}"
 technitium_role_web_domain: "{{ user.domain }}"
+technitium_role_web_fqdn: "{{ lookup('role_var', '_web_subdomain', role='technitium') }}.{{ lookup('role_var', '_web_domain', role='technitium') }}"
 technitium_role_web_port: "5380"
 technitium_role_web_url: "{{ lookup('role_web', role='technitium', scheme='https') }}"
 
@@ -78,7 +115,7 @@ technitium_role_traefik_api_enabled: false
 technitium_role_traefik_api_endpoint: ""
 
 ################################
-# Docker
+# Docker - Technitium
 ################################
 
 # Container
@@ -91,11 +128,13 @@ technitium_role_docker_image_tag: "latest"
 technitium_role_docker_image: "{{ lookup('role_var', '_docker_image_repo', role='technitium') }}:{{ lookup('role_var', '_docker_image_tag', role='technitium') }}"
 
 # Ports
-# The web UI is intentionally not published directly; Traefik reaches port 5380
-# through the common Docker network.
+# The web UI remains internal to the common Docker network for Traefik.
+# Standard DNS, DoT and DoQ are published directly on the selected host IP.
 technitium_role_docker_ports_default:
   - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:53:53/udp"
   - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:53:53/tcp"
+  - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:{{ lookup('role_var', '_doq_port', role='technitium') }}:{{ lookup('role_var', '_doq_port', role='technitium') }}/udp"
+  - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:{{ lookup('role_var', '_dot_port', role='technitium') }}:{{ lookup('role_var', '_dot_port', role='technitium') }}/tcp"
 technitium_role_docker_ports_custom: []
 technitium_role_docker_ports: "{{ lookup('role_var', '_docker_ports_default', role='technitium')
                                  + lookup('role_var', '_docker_ports_custom', role='technitium') }}"
@@ -116,6 +155,7 @@ technitium_role_docker_envs: "{{ lookup('role_var', '_docker_envs_default', role
 technitium_role_docker_volumes_default:
   - "{{ lookup('role_var', '_paths_config_location', role='technitium') }}:/etc/dns"
   - "{{ lookup('role_var', '_paths_logs_location', role='technitium') }}:/var/log/technitium/dns"
+  - "{{ lookup('role_var', '_paths_tls_location', role='technitium') }}:/etc/dns/tls:ro"
 technitium_role_docker_volumes_custom: []
 technitium_role_docker_volumes: "{{ lookup('role_var', '_docker_volumes_default', role='technitium')
                                     + lookup('role_var', '_docker_volumes_custom', role='technitium') }}"
@@ -148,3 +188,47 @@ technitium_role_docker_sysctls:
 
 # Restart policy
 technitium_role_docker_restart_policy: unless-stopped
+
+################################
+# Docker - ACME companion
+################################
+
+# Container
+technitium_acme_role_docker_container: "{{ technitium_acme_name }}"
+
+# Image
+technitium_acme_role_docker_image_pull: true
+technitium_acme_role_docker_image_repo: "neilpang/acme.sh"
+technitium_acme_role_docker_image_tag: "latest"
+technitium_acme_role_docker_image: "{{ technitium_acme_role_docker_image_repo }}:{{ technitium_acme_role_docker_image_tag }}"
+
+# Command
+technitium_acme_role_docker_commands:
+  - /bin/sh
+  - /opt/technitium-acme/entrypoint.sh
+
+# Environment is loaded from a root-only file generated by tasks/main.yml so
+# provider credentials and the PFX password are not embedded in this repository.
+technitium_acme_role_docker_env_file: "{{ lookup('role_var', '_paths_acme_env', role='technitium') }}"
+
+# Volumes
+technitium_acme_role_docker_volumes_global: false
+technitium_acme_role_docker_volumes:
+  - "{{ lookup('role_var', '_paths_acme_location', role='technitium') }}:/acme.sh"
+  - "{{ lookup('role_var', '_paths_tls_location', role='technitium') }}:/certs"
+  - "{{ lookup('role_var', '_paths_acme_entrypoint', role='technitium') }}:/opt/technitium-acme/entrypoint.sh:ro"
+  - "{{ lookup('role_var', '_paths_acme_deploy', role='technitium') }}:/opt/technitium-acme/deploy-pfx.sh:ro"
+
+# Do not inherit Traefik labels on this internal helper container.
+technitium_acme_role_docker_labels_use_common: false
+technitium_acme_role_docker_labels: {}
+
+# Hostname
+technitium_acme_role_docker_hostname: "{{ technitium_acme_name }}"
+
+# Networks
+technitium_acme_role_docker_networks_alias: "{{ technitium_acme_name }}"
+technitium_acme_role_docker_networks: "{{ docker_networks_common }}"
+
+# Restart policy
+technitium_acme_role_docker_restart_policy: unless-stopped
