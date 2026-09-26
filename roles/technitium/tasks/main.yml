@@ -12,17 +12,6 @@
     path: "{{ lookup('role_var', '_paths_config_location', role='technitium') }}/dns.config"
   register: technitium_config
 
-- name: Load existing Technitium Saltbox facts
-  saltbox_facts:
-    role: technitium
-    instance: technitium
-    owner: "{{ user.name }}"
-    group: "{{ user.name }}"
-    mode: "0600"
-    base_path: "{{ server_appdata_path }}"
-  register: technitium_existing_saltbox_facts
-  no_log: true
-
 - name: Persist initial Technitium admin password
   saltbox_facts:
     role: technitium
