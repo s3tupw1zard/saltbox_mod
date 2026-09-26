@@ -64,6 +64,41 @@ On a default installation the host publishes:
 
 The Technitium web port `5380` is not published on the host. Traefik reaches it through the common Saltbox Docker network.
 
+## Classic DNS port overrides
+
+Classic DNS is enabled by default and keeps the standard host/container port mapping:
+
+```yaml
+technitium_role_dns_enabled: true
+technitium_role_dns_host_port: "53"
+technitium_role_dns_port: "53"
+```
+
+`technitium_role_dns_host_port` is the port published on the Saltbox host. `technitium_role_dns_port` is the DNS port inside the Technitium container and should normally remain `53`.
+
+If another local service already owns host port 53, keep Technitium's internal DNS port unchanged and only move the host-side mapping, for example:
+
+```yaml
+technitium_role_dns_enabled: true
+technitium_role_dns_host_port: "5300"
+technitium_role_dns_port: "53"
+```
+
+That produces:
+
+```text
+5300/udp -> technitium:53/udp
+5300/tcp -> technitium:53/tcp
+```
+
+To stop publishing classic DNS entirely while leaving DoT/DoQ available:
+
+```yaml
+technitium_role_dns_enabled: false
+```
+
+These variables affect only classic DNS. DNS-over-TLS and DNS-over-QUIC continue to use their own feature flags and port settings.
+
 ## Dedicated ACME companion
 
 Traefik remains responsible only for the HTTPS certificate used by the web console. The DNS protocols get their own certificate lifecycle.
@@ -221,7 +256,7 @@ To restrict them to a LAN, NetBird, Tailscale or another interface, override the
 technitium_role_dns_bind_ip: "100.64.0.10"
 ```
 
-Make sure TCP/UDP port 53 and, when enabled, TCP/UDP port 853 are free on the selected address.
+Make sure the configured classic DNS host port and, when enabled, TCP/UDP port 853 are free on the selected address.
 
 The role intentionally does not disable `systemd-resolved` or any other resolver automatically.
 
