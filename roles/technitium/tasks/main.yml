@@ -12,6 +12,35 @@
     path: "{{ lookup('role_var', '_paths_config_location', role='technitium') }}/dns.config"
   register: technitium_config
 
+- name: Load existing Technitium Saltbox facts
+  saltbox_facts:
+    role: technitium
+    instance: technitium
+    owner: "{{ user.name }}"
+    group: "{{ user.name }}"
+    mode: "0600"
+    base_path: "{{ server_appdata_path }}"
+  register: technitium_existing_saltbox_facts
+  no_log: true
+
+- name: Persist Technitium PKCS#12 password
+  saltbox_facts:
+    role: technitium
+    instance: technitium
+    keys:
+      tls_pfx_password: >-
+        {{ lookup('role_var', '_acme_pfx_password', role='technitium',
+                  default=lookup('ansible.builtin.password', '/dev/null',
+                                 chars=['ascii_letters', 'digits'], length=64),
+                  default_if_empty=true) }}
+    owner: "{{ user.name }}"
+    group: "{{ user.name }}"
+    mode: "0600"
+    base_path: "{{ server_appdata_path }}"
+  register: technitium_tls_saltbox_facts
+  no_log: true
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
+
 - name: Persist initial Technitium admin password
   saltbox_facts:
     role: technitium
@@ -26,7 +55,7 @@
     group: "{{ user.name }}"
     mode: "0600"
     base_path: "{{ server_appdata_path }}"
-  register: technitium_saltbox_facts
+  register: technitium_admin_saltbox_facts
   no_log: true
   when: not technitium_config.stat.exists
 
@@ -34,16 +63,90 @@
   ansible.builtin.set_fact:
     technitium_role_docker_envs: >-
       {{ lookup('role_var', '_docker_envs_default', role='technitium')
-         | combine({'DNS_SERVER_ADMIN_PASSWORD': technitium_saltbox_facts.facts.admin_password})
+         | combine({'DNS_SERVER_ADMIN_PASSWORD': technitium_admin_saltbox_facts.facts.admin_password})
          | combine(lookup('role_var', '_docker_envs_custom', role='technitium')) }}
   no_log: true
   when: not technitium_config.stat.exists
 
-- name: Remove existing Technitium Docker container
+- name: Validate Technitium DNS service hostname
+  ansible.builtin.assert:
+    that:
+      - lookup('role_var', '_service_dns_record', role='technitium') | trim | length > 0
+      - lookup('role_var', '_service_dns_zone', role='technitium') | trim | length > 0
+    fail_msg: >-
+      Technitium requires a DNS service hostname. Configure
+      technitium_role_service_dns_record and technitium_role_service_dns_zone.
+
+- name: Validate Cloudflare ACME credentials
+  ansible.builtin.assert:
+    that:
+      - >-
+        cloudflare_is_enabled
+        or ('CF_Token' in lookup('role_var', '_acme_envs_custom', role='technitium'))
+        or (('CF_Key' in lookup('role_var', '_acme_envs_custom', role='technitium'))
+            and ('CF_Email' in lookup('role_var', '_acme_envs_custom', role='technitium')))
+    fail_msg: >-
+      technitium_role_acme_dns_provider is dns_cf, but no Cloudflare credentials
+      are available. Configure Cloudflare in Saltbox accounts.yml or provide
+      CF_Token (or CF_Key and CF_Email) through technitium_role_acme_envs_custom.
+  when:
+    - lookup('role_var', '_acme_enabled', role='technitium') | bool
+    - lookup('role_var', '_acme_dns_provider', role='technitium') == 'dns_cf'
+
+- name: Remove existing Technitium Docker containers
   ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/remove_docker_container.yml"
+  vars:
+    container_name: "{{ item }}"
+  loop:
+    - "{{ technitium_name }}"
+    - "{{ technitium_acme_name }}"
 
 - name: Create Technitium directories
   ansible.builtin.include_tasks: "{{ resources_tasks_path }}/directories/create_directories.yml"
+
+- name: Install Technitium ACME entrypoint
+  ansible.builtin.copy:
+    src: acme-entrypoint.sh
+    dest: "{{ lookup('role_var', '_paths_acme_entrypoint', role='technitium') }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
+
+- name: Install Technitium ACME PFX deploy hook
+  ansible.builtin.copy:
+    src: acme-deploy-pfx.sh
+    dest: "{{ lookup('role_var', '_paths_acme_deploy', role='technitium') }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
+
+- name: Write Technitium ACME environment file
+  ansible.builtin.copy:
+    dest: "{{ lookup('role_var', '_paths_acme_env', role='technitium') }}"
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      TECHNITIUM_ACME_DOMAIN={{ lookup('role_var', '_service_dns_fqdn', role='technitium') }}
+      TECHNITIUM_ACME_EMAIL={{ lookup('role_var', '_acme_email', role='technitium') }}
+      TECHNITIUM_ACME_SERVER={{ lookup('role_var', '_acme_server', role='technitium') }}
+      TECHNITIUM_ACME_DNS_PROVIDER={{ lookup('role_var', '_acme_dns_provider', role='technitium') }}
+      TECHNITIUM_ACME_KEY_LENGTH={{ lookup('role_var', '_acme_key_length', role='technitium') }}
+      TECHNITIUM_PFX_PASSWORD={{ technitium_tls_saltbox_facts.facts.tls_pfx_password }}
+      TECHNITIUM_PFX_TARGET=/certs/dns.pfx
+      {% if cloudflare_scoped_token_is_enabled %}
+      CF_Token={{ cloudflare_scoped_token }}
+      {% elif cloudflare_api_key_is_enabled %}
+      CF_Key={{ cloudflare_api_key }}
+      CF_Email={{ cloudflare_email }}
+      {% endif %}
+      {% for item in lookup('role_var', '_acme_envs_custom', role='technitium') | dict2items %}
+      {{ item.key }}={{ item.value }}
+      {% endfor %}
+  no_log: true
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
 
 - name: Add Technitium web DNS record
   ansible.builtin.include_tasks: "{{ resources_tasks_path }}/dns/tasker.yml"
@@ -51,6 +154,9 @@
     dns_record: "{{ lookup('role_var', '_dns_record', role='technitium') }}"
     dns_zone: "{{ lookup('role_var', '_dns_zone', role='technitium') }}"
     dns_proxy: "{{ lookup('role_var', '_dns_proxy', role='technitium') }}"
+  when: >-
+    lookup('role_var', '_web_fqdn', role='technitium')
+    != lookup('role_var', '_service_dns_fqdn', role='technitium')
 
 - name: Add Technitium DNS service record
   ansible.builtin.include_tasks: "{{ resources_tasks_path }}/dns/tasker.yml"
@@ -58,7 +164,139 @@
     dns_record: "{{ lookup('role_var', '_service_dns_record', role='technitium') }}"
     dns_zone: "{{ lookup('role_var', '_service_dns_zone', role='technitium') }}"
     dns_proxy: "{{ lookup('role_var', '_service_dns_proxy', role='technitium') }}"
-  when: lookup('role_var', '_service_dns_record', role='technitium') | length > 0
+
+- name: Create Technitium ACME container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
+  vars:
+    var_prefix: technitium_acme
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
+
+- name: Wait for Technitium PKCS#12 certificate
+  ansible.builtin.wait_for:
+    path: "{{ lookup('role_var', '_paths_tls_pfx', role='technitium') }}"
+    state: present
+    timeout: 300
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
+
+- name: Check Technitium PKCS#12 certificate
+  ansible.builtin.stat:
+    path: "{{ lookup('role_var', '_paths_tls_pfx', role='technitium') }}"
+  register: technitium_tls_pfx
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
+
+- name: Validate Technitium PKCS#12 certificate
+  ansible.builtin.assert:
+    that:
+      - technitium_tls_pfx.stat.exists
+      - technitium_tls_pfx.stat.size | int > 0
+    fail_msg: >-
+      The Technitium ACME companion did not produce a usable PKCS#12 certificate.
+      Inspect the {{ technitium_acme_name }} container logs for ACME/DNS errors.
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
 
 - name: Create Technitium Docker container
   ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
+
+- name: Determine whether encrypted DNS can be configured automatically
+  ansible.builtin.set_fact:
+    technitium_configure_encrypted_dns: >-
+      {{ (lookup('role_var', '_acme_enabled', role='technitium') | bool)
+         and ((not technitium_config.stat.exists)
+              or (lookup('role_var', '_admin_password', role='technitium') | length > 0)) }}
+
+- name: Configure Technitium encrypted DNS
+  when: technitium_configure_encrypted_dns | bool
+  block:
+    - name: Select Technitium API admin password
+      ansible.builtin.set_fact:
+        technitium_api_admin_password: >-
+          {{ technitium_admin_saltbox_facts.facts.admin_password
+             if not technitium_config.stat.exists
+             else lookup('role_var', '_admin_password', role='technitium') }}
+      no_log: true
+
+    - name: Wait for Technitium container to become healthy
+      community.docker.docker_container_info:
+        name: "{{ technitium_name }}"
+      register: technitium_container_info
+      retries: 24
+      delay: 5
+      until:
+        - technitium_container_info.exists
+        - technitium_container_info.container.State.Health.Status == 'healthy'
+
+    - name: Login to Technitium API
+      community.docker.docker_container_exec:
+        container: "{{ technitium_name }}"
+        argv:
+          - curl
+          - --fail-with-body
+          - --silent
+          - --show-error
+          - --request
+          - POST
+          - http://127.0.0.1:5380/api/user/login
+          - --header
+          - "Content-Type: application/x-www-form-urlencoded"
+          - --data-urlencode
+          - user=admin
+          - --data-urlencode
+          - "pass={{ technitium_api_admin_password }}"
+      register: technitium_api_login
+      changed_when: false
+      no_log: true
+
+    - name: Store Technitium API session token
+      ansible.builtin.set_fact:
+        technitium_api_token: "{{ (technitium_api_login.stdout | from_json).token }}"
+      no_log: true
+
+    - name: Enable Technitium DNS-over-TLS and DNS-over-QUIC
+      community.docker.docker_container_exec:
+        container: "{{ technitium_name }}"
+        argv:
+          - curl
+          - --fail-with-body
+          - --silent
+          - --show-error
+          - --request
+          - POST
+          - http://127.0.0.1:5380/api/settings/set
+          - --header
+          - "Authorization: Bearer {{ technitium_api_token }}"
+          - --header
+          - "Content-Type: application/x-www-form-urlencoded"
+          - --data-urlencode
+          - "enableDnsOverTls={{ lookup('role_var', '_dot_enabled', role='technitium') | string | lower }}"
+          - --data-urlencode
+          - "dnsOverTlsPort={{ lookup('role_var', '_dot_port', role='technitium') }}"
+          - --data-urlencode
+          - "enableDnsOverQuic={{ lookup('role_var', '_doq_enabled', role='technitium') | string | lower }}"
+          - --data-urlencode
+          - "dnsOverQuicPort={{ lookup('role_var', '_doq_port', role='technitium') }}"
+          - --data-urlencode
+          - "dnsTlsCertificatePath={{ lookup('role_var', '_tls_pfx_container_path', role='technitium') }}"
+          - --data-urlencode
+          - "dnsTlsCertificatePassword={{ technitium_tls_saltbox_facts.facts.tls_pfx_password }}"
+      register: technitium_api_settings
+      changed_when: (technitium_api_settings.stdout | from_json).status == 'ok'
+      failed_when: >-
+        technitium_api_settings.rc != 0
+        or (technitium_api_settings.stdout | from_json).status != 'ok'
+      no_log: true
+
+    - name: Logout Technitium API session
+      community.docker.docker_container_exec:
+        container: "{{ technitium_name }}"
+        argv:
+          - curl
+          - --fail-with-body
+          - --silent
+          - --show-error
+          - --request
+          - POST
+          - http://127.0.0.1:5380/api/user/logout
+          - --header
+          - "Authorization: Bearer {{ technitium_api_token }}"
+      changed_when: false
+      no_log: true
