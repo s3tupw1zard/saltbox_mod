@@ -57,9 +57,11 @@ sb install saltbox-mod
 sb install mod-technitium
 ```
 
-It uses the official `docker.io/technitium/dns-server:latest` image. The web console is exposed through Saltbox Traefik at `technitium.<domain>`, while the DNS service is published on TCP/UDP port 53 and gets a separate unproxied `dns.<domain>` record.
+It uses the official `docker.io/technitium/dns-server:latest` image. By default the web console is exposed through Saltbox Traefik at `technitium.<saltbox-domain>`, while DNS, DNS-over-TLS and DNS-over-QUIC use the separate unproxied hostname `dns.<saltbox-domain>`. Both hostname parts and domains are role-specific Inventory overrides, and a shared hostname is supported as well.
 
-On a fresh installation, the role generates a random Technitium admin password and persists it with Saltbox facts instead of leaving the upstream default credentials active. See [`roles/technitium/README.md`](roles/technitium/README.md) for the generated password location, DNS bind-address overrides, port-53 considerations and encrypted-DNS options.
+A dedicated `acme.sh` companion performs DNS-01 issuance for the encrypted-DNS hostname, converts the certificate to the PKCS#12 format Technitium expects and renews it independently of Traefik. With the default Cloudflare provider it reuses the credentials already configured in Saltbox; no provider secret is committed to this repository.
+
+On a fresh installation, the role generates a random Technitium admin password and PKCS#12 password, persists them with Saltbox facts, and configures DoT/DoQ through Technitium's API. See [`roles/technitium/README.md`](roles/technitium/README.md) for hostname overrides, ACME provider configuration, existing-install migration and bind-address options.
 
 ## Installing a custom role
 
@@ -129,7 +131,7 @@ roles/
   _template/             # copy-only role template, not deployed
   kkrepo/                # kkRepo + MySQL role
   infisical/             # Infisical + PostgreSQL + Redis role
-  technitium/            # Technitium DNS Server role
+  technitium/            # Technitium DNS Server + ACME companion
   <app>/                 # other custom roles
 examples/
   kkrepo/                # standalone Compose reference
