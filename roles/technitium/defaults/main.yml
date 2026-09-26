@@ -1,0 +1,150 @@
+#########################################################################
+# Title:         Saltbox Mod: Technitium DNS Server Role Defaults      #
+# Author(s):     s3tupw1zard                                           #
+# URL:           https://github.com/s3tupw1zard/saltbox_mod            #
+# --                                                                   #
+#########################################################################
+#                   GNU General Public License v3.0                    #
+#########################################################################
+---
+################################
+# Basics
+################################
+
+technitium_name: technitium
+
+################################
+# Settings
+################################
+
+# Used only when Technitium creates /etc/dns/dns.config for the first time.
+# Leave empty to generate and persist a random password with saltbox_facts.
+technitium_role_admin_password: ""
+
+# Address on the Saltbox host where plain DNS is published.
+# Override this with a LAN/NetBird address when DNS should not be public.
+technitium_role_dns_bind_ip: "0.0.0.0"
+
+# Separate service hostname for DNS clients. This record is intentionally
+# unproxied because normal DNS traffic on port 53 cannot pass through the
+# Cloudflare HTTP proxy.
+technitium_role_service_dns_record: "dns"
+technitium_role_service_dns_zone: "{{ user.domain }}"
+technitium_role_service_dns_proxy: false
+technitium_role_server_domain: "{{ lookup('role_var', '_service_dns_record', role='technitium') }}.{{ lookup('role_var', '_service_dns_zone', role='technitium') }}"
+
+################################
+# Paths
+################################
+
+technitium_role_paths_folder: "{{ technitium_name }}"
+technitium_role_paths_location: "{{ server_appdata_path }}/{{ technitium_role_paths_folder }}"
+technitium_role_paths_config_location: "{{ technitium_role_paths_location }}/config"
+technitium_role_paths_logs_location: "{{ technitium_role_paths_location }}/logs"
+technitium_role_paths_folders_list:
+  - "{{ technitium_role_paths_location }}"
+  - "{{ technitium_role_paths_config_location }}"
+  - "{{ technitium_role_paths_logs_location }}"
+
+################################
+# Web
+################################
+
+technitium_role_web_subdomain: "{{ technitium_name }}"
+technitium_role_web_domain: "{{ user.domain }}"
+technitium_role_web_port: "5380"
+technitium_role_web_url: "{{ lookup('role_web', role='technitium', scheme='https') }}"
+
+################################
+# DNS - Web UI
+################################
+
+technitium_role_dns_record: "{{ lookup('role_var', '_web_subdomain', role='technitium') }}"
+technitium_role_dns_zone: "{{ lookup('role_var', '_web_domain', role='technitium') }}"
+technitium_role_dns_proxy: "{{ dns_proxied }}"
+
+################################
+# Traefik
+################################
+
+technitium_role_traefik_sso_middleware: "{{ traefik_default_sso_middleware }}"
+technitium_role_traefik_middleware_default: "{{ traefik_default_middleware }}"
+technitium_role_traefik_middleware_custom: ""
+technitium_role_traefik_middleware_default_api: "{{ traefik_default_middleware_api }}"
+technitium_role_traefik_middleware_custom_api: ""
+technitium_role_traefik_certresolver: "{{ traefik_default_certresolver }}"
+technitium_role_traefik_enabled: true
+technitium_role_traefik_api_enabled: false
+technitium_role_traefik_api_endpoint: ""
+
+################################
+# Docker
+################################
+
+# Container
+technitium_role_docker_container: "{{ technitium_name }}"
+
+# Image
+technitium_role_docker_image_pull: true
+technitium_role_docker_image_repo: "docker.io/technitium/dns-server"
+technitium_role_docker_image_tag: "latest"
+technitium_role_docker_image: "{{ lookup('role_var', '_docker_image_repo', role='technitium') }}:{{ lookup('role_var', '_docker_image_tag', role='technitium') }}"
+
+# Ports
+# The web UI is intentionally not published directly; Traefik reaches port 5380
+# through the common Docker network.
+technitium_role_docker_ports_default:
+  - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:53:53/udp"
+  - "{{ lookup('role_var', '_dns_bind_ip', role='technitium') }}:53:53/tcp"
+technitium_role_docker_ports_custom: []
+technitium_role_docker_ports: "{{ lookup('role_var', '_docker_ports_default', role='technitium')
+                                 + lookup('role_var', '_docker_ports_custom', role='technitium') }}"
+
+# Environment
+# DNS_SERVER_ADMIN_PASSWORD is injected by tasks/main.yml only on an
+# uninitialized install because Technitium reads initialization variables only
+# when /etc/dns/dns.config does not exist.
+technitium_role_docker_envs_default:
+  TZ: "{{ tz }}"
+  DNS_SERVER_DOMAIN: "{{ lookup('role_var', '_server_domain', role='technitium') }}"
+  DNS_SERVER_LOG_FOLDER_PATH: "/var/log/technitium/dns"
+technitium_role_docker_envs_custom: {}
+technitium_role_docker_envs: "{{ lookup('role_var', '_docker_envs_default', role='technitium')
+                                 | combine(lookup('role_var', '_docker_envs_custom', role='technitium')) }}"
+
+# Volumes
+technitium_role_docker_volumes_default:
+  - "{{ lookup('role_var', '_paths_config_location', role='technitium') }}:/etc/dns"
+  - "{{ lookup('role_var', '_paths_logs_location', role='technitium') }}:/var/log/technitium/dns"
+technitium_role_docker_volumes_custom: []
+technitium_role_docker_volumes: "{{ lookup('role_var', '_docker_volumes_default', role='technitium')
+                                    + lookup('role_var', '_docker_volumes_custom', role='technitium') }}"
+
+# Hostname
+technitium_role_docker_hostname: "{{ technitium_name }}"
+
+# Networks
+technitium_role_docker_networks_alias: "{{ technitium_name }}"
+technitium_role_docker_networks_default: []
+technitium_role_docker_networks_custom: []
+technitium_role_docker_networks: "{{ docker_networks_common
+                                     + lookup('role_var', '_docker_networks_default', role='technitium')
+                                     + lookup('role_var', '_docker_networks_custom', role='technitium') }}"
+
+# Healthcheck
+technitium_role_docker_healthcheck:
+  test:
+    - CMD-SHELL
+    - "curl -f http://127.0.0.1:5380/api/dnsClient/healthCheck | grep '\"status\":\"ok\"'"
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 10s
+
+# Recommended by the upstream Docker Compose deployment when bridge networking
+# is used. Remove this override if switching the container to host networking.
+technitium_role_docker_sysctls:
+  net.ipv4.ip_local_port_range: "1024 65535"
+
+# Restart policy
+technitium_role_docker_restart_policy: unless-stopped
