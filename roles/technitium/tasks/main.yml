@@ -1,0 +1,75 @@
+#########################################################################
+# Title:         Saltbox Mod: Technitium DNS Server Role               #
+# Author(s):     s3tupw1zard                                           #
+# URL:           https://github.com/s3tupw1zard/saltbox_mod            #
+# --                                                                   #
+#########################################################################
+#                   GNU General Public License v3.0                    #
+#########################################################################
+---
+- name: Check whether Technitium is already initialized
+  ansible.builtin.stat:
+    path: "{{ lookup('role_var', '_paths_config_location', role='technitium') }}/dns.config"
+  register: technitium_config
+
+- name: Load existing Technitium Saltbox facts
+  saltbox_facts:
+    role: technitium
+    instance: technitium
+    owner: "{{ user.name }}"
+    group: "{{ user.name }}"
+    mode: "0600"
+    base_path: "{{ server_appdata_path }}"
+  register: technitium_existing_saltbox_facts
+  no_log: true
+
+- name: Persist initial Technitium admin password
+  saltbox_facts:
+    role: technitium
+    instance: technitium
+    keys:
+      admin_password: >-
+        {{ lookup('role_var', '_admin_password', role='technitium',
+                  default=lookup('ansible.builtin.password', '/dev/null',
+                                 chars=['ascii_letters', 'digits'], length=64),
+                  default_if_empty=true) }}
+    owner: "{{ user.name }}"
+    group: "{{ user.name }}"
+    mode: "0600"
+    base_path: "{{ server_appdata_path }}"
+  register: technitium_saltbox_facts
+  no_log: true
+  when: not technitium_config.stat.exists
+
+- name: Add initial Technitium admin password to container environment
+  ansible.builtin.set_fact:
+    technitium_role_docker_envs: >-
+      {{ lookup('role_var', '_docker_envs_default', role='technitium')
+         | combine({'DNS_SERVER_ADMIN_PASSWORD': technitium_saltbox_facts.facts.admin_password})
+         | combine(lookup('role_var', '_docker_envs_custom', role='technitium')) }}
+  no_log: true
+  when: not technitium_config.stat.exists
+
+- name: Remove existing Technitium Docker container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/remove_docker_container.yml"
+
+- name: Create Technitium directories
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/directories/create_directories.yml"
+
+- name: Add Technitium web DNS record
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/dns/tasker.yml"
+  vars:
+    dns_record: "{{ lookup('role_var', '_dns_record', role='technitium') }}"
+    dns_zone: "{{ lookup('role_var', '_dns_zone', role='technitium') }}"
+    dns_proxy: "{{ lookup('role_var', '_dns_proxy', role='technitium') }}"
+
+- name: Add Technitium DNS service record
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/dns/tasker.yml"
+  vars:
+    dns_record: "{{ lookup('role_var', '_service_dns_record', role='technitium') }}"
+    dns_zone: "{{ lookup('role_var', '_service_dns_zone', role='technitium') }}"
+    dns_proxy: "{{ lookup('role_var', '_service_dns_proxy', role='technitium') }}"
+  when: lookup('role_var', '_service_dns_record', role='technitium') | length > 0
+
+- name: Create Technitium Docker container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
