@@ -117,6 +117,7 @@ kkrepo_role_docker_volumes: "{{ lookup('role_var', '_docker_volumes_default', ro
 kkrepo_role_docker_hostname: "{{ kkrepo_name }}"
 
 # Networks
+kkrepo_role_docker_network_mode: "{{ docker_networks_name_common }}"
 kkrepo_role_docker_networks_alias: "{{ kkrepo_name }}"
 kkrepo_role_docker_networks_default: []
 kkrepo_role_docker_networks_custom: []
@@ -163,6 +164,7 @@ kkrepo_mysql_role_docker_labels: {}
 kkrepo_mysql_role_docker_hostname: "{{ kkrepo_mysql_name }}"
 
 # Networks
+kkrepo_mysql_role_docker_network_mode: "{{ docker_networks_name_common }}"
 kkrepo_mysql_role_docker_networks_alias: "{{ kkrepo_mysql_name }}"
 kkrepo_mysql_role_docker_networks:
   - name: "{{ docker_networks_name_common }}"
