@@ -98,6 +98,9 @@ infisical_role_docker_envs: "{{ lookup('role_var', '_docker_envs_default', role=
 infisical_role_docker_hostname: infisical-backend
 
 # Networks
+# Saltbox is the primary network so Traefik can always reach the backend. The
+# private Infisical network remains attached for PostgreSQL and Redis traffic.
+infisical_role_docker_network_mode: "{{ docker_networks_name_common }}"
 infisical_role_docker_networks_alias: infisical-backend
 infisical_role_docker_networks_default:
   - name: "{{ infisical_role_docker_network_private }}"
