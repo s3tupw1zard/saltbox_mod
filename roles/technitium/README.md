@@ -1,28 +1,50 @@
 # Technitium DNS Server Saltbox role
 
-Installs the official Technitium DNS Server Docker image and exposes the web console through the normal Saltbox Traefik/DNS integration.
+Installs the official Technitium DNS Server Docker image, exposes its web console through the normal Saltbox Traefik integration, and uses a dedicated `acme.sh` companion for the certificate used by DNS-over-TLS and DNS-over-QUIC.
 
-The image is configured as:
+The main image is:
 
 ```text
 docker.io/technitium/dns-server:latest
 ```
 
-The role keeps the web console and DNS service hostnames separate by default:
+The ACME companion uses:
+
+```text
+neilpang/acme.sh:latest
+```
+
+## Default hostnames
+
+The role uses the domain already configured in Saltbox (`user.domain`) and keeps the web and DNS service names separate by default:
 
 ```yaml
 technitium_role_web_subdomain: technitium
+technitium_role_web_domain: "{{ user.domain }}"
+
 technitium_role_service_dns_record: dns
+technitium_role_service_dns_zone: "{{ user.domain }}"
 ```
 
-This results in:
+This produces:
 
 ```text
-https://technitium.<domain>   # Web console through Traefik
-dns.<domain>:53               # DNS service, direct/unproxied
+https://technitium.<saltbox-domain>   Web console through Traefik
+dns.<saltbox-domain>                  DNS / DoT / DoQ, direct and unproxied
 ```
 
-The DNS service record is intentionally created without Cloudflare proxying. Standard DNS traffic on TCP/UDP port 53 cannot be carried through the normal Cloudflare HTTP proxy.
+Both parts are role-specific overrides. Nothing requires the web and DNS names to be different.
+
+For example, to use the same hostname for everything:
+
+```yaml
+technitium_role_web_subdomain: technitium
+technitium_role_service_dns_record: technitium
+```
+
+With the default Saltbox domain, both then resolve as `technitium.<saltbox-domain>`. In this shared-hostname mode the role creates only one DNS record and deliberately leaves it unproxied. Traefik can still serve the web console on HTTPS, while TCP/UDP DNS traffic reaches the host directly.
+
+The DNS service record must not use the normal Cloudflare HTTP proxy because DNS on port 53 and DoT/DoQ on port 853 need to reach the Saltbox host directly.
 
 ## Install
 
@@ -31,115 +53,223 @@ sb install saltbox-mod
 sb install mod-technitium
 ```
 
-The default container publishes DNS on TCP and UDP port 53 and keeps the web console port 5380 internal to the common Saltbox Docker network for Traefik.
+On a default installation the host publishes:
 
-## Initial admin password
+```text
+53/udp    DNS
+53/tcp    DNS
+853/tcp   DNS-over-TLS
+853/udp   DNS-over-QUIC
+```
 
-Technitium's built-in administrator account is `admin`. On a fresh installation this role does not leave the upstream default password in place.
+The Technitium web port `5380` is not published on the host. Traefik reaches it through the common Saltbox Docker network.
 
-If `technitium_role_admin_password` is empty, the role generates a random 64-character password and persists it using Saltbox facts. The facts file is normally:
+## Dedicated ACME companion
+
+Traefik remains responsible only for the HTTPS certificate used by the web console. The DNS protocols get their own certificate lifecycle.
+
+The `technitium-acme` companion:
+
+1. requests a certificate for `technitium_role_service_dns_fqdn` using DNS-01;
+2. keeps its ACME account and renewal state under `/opt/technitium/acme`;
+3. exports the renewed certificate through acme.sh's supported `--install-cert` mechanism;
+4. converts the certificate and private key to PKCS#12;
+5. atomically replaces `/opt/technitium/tls/dns.pfx`;
+6. remains running as acme.sh's renewal daemon.
+
+The ACME container publishes no ports and does not receive the Docker socket.
+
+Technitium mounts only the final TLS directory read-only and uses:
+
+```text
+/etc/dns/tls/dns.pfx
+```
+
+for its optional DNS protocols. Technitium monitors the certificate file and reloads certificate changes automatically, so renewal does not require restarting the DNS container.
+
+### Cloudflare credentials
+
+The default provider is Cloudflare:
+
+```yaml
+technitium_role_acme_dns_provider: dns_cf
+```
+
+When Saltbox already has Cloudflare configured, the role automatically reuses the credentials from the normal Saltbox account configuration. A scoped token is preferred when available; the legacy API key plus account email is also supported.
+
+No Cloudflare token is committed to this repository. The generated runtime environment file is stored as root-only `0600` at:
+
+```text
+/opt/technitium/acme.env
+```
+
+If you want this role to use separate Cloudflare credentials, override them explicitly:
+
+```yaml
+technitium_role_acme_envs_custom:
+  CF_Token: "YOUR_DEDICATED_TOKEN"
+```
+
+For another acme.sh DNS provider, select its provider name and supply the environment variables required by that provider:
+
+```yaml
+technitium_role_acme_dns_provider: "dns_PROVIDER"
+technitium_role_acme_envs_custom:
+  PROVIDER_VARIABLE: "value"
+```
+
+Use the acme.sh DNS API documentation for the exact provider name and environment-variable names.
+
+### ACME settings
+
+Useful overrides include:
+
+```yaml
+technitium_role_acme_enabled: true
+technitium_role_acme_email: "{{ user.email }}"
+technitium_role_acme_server: letsencrypt
+technitium_role_acme_key_length: ec-256
+```
+
+The ACME email defaults to the email already configured for the Saltbox user.
+
+## PKCS#12 password
+
+Technitium needs a password for the generated `.pfx`. If this is left empty:
+
+```yaml
+technitium_role_acme_pfx_password: ""
+```
+
+the role generates a random 64-character value and persists it with `saltbox_facts`. The persisted value is stored with the other Technitium facts, normally in:
 
 ```text
 /opt/saltbox/technitium.ini
 ```
 
-Inspect that file after the first install to obtain the generated password.
+It does not need to be committed to Inventory or Git.
 
-To provide your own initial password, set this in the Saltbox Inventory before the first install:
+## Initial Technitium administrator password
+
+Technitium's built-in administrator account is `admin`. On a new installation the role generates a random administrator password instead of leaving the upstream default credentials active.
+
+The generated password is also persisted through Saltbox facts in:
+
+```text
+/opt/saltbox/technitium.ini
+```
+
+To provide your own password before the first installation:
 
 ```yaml
 technitium_role_admin_password: "YOUR_INITIAL_PASSWORD"
 ```
 
-The password is persisted to Saltbox facts during initialization, so the Inventory value can be removed afterwards.
+Technitium Docker initialization variables are only consumed while `/etc/dns/dns.config` does not yet exist.
 
-Technitium Docker initialization environment variables are only read when `/etc/dns/dns.config` does not yet exist. Changing `technitium_role_admin_password`, `technitium_role_server_domain` or another initialization environment variable later does not reconfigure an existing Technitium installation; make later changes through the Technitium web console/API.
+### Existing Technitium installations
 
-If an existing Technitium config is adopted by this role, the role leaves its existing administrator credentials untouched.
+For a fresh installation, the role automatically logs in to Technitium after startup and configures the generated certificate, DNS-over-TLS and DNS-over-QUIC.
 
-## Paths and backups
+For an existing installation the role does not assume that a previously stored administrator password is still valid, since it may have been changed inside Technitium. To allow one automatic encrypted-DNS configuration pass, temporarily provide the current administrator password:
 
-Persistent data is stored under the normal Saltbox appdata path:
-
-```text
-/opt/technitium/config
-/opt/technitium/logs
+```yaml
+technitium_role_admin_password: "CURRENT_ADMIN_PASSWORD"
 ```
 
-The important backup paths are:
+Run:
 
-```text
-/opt/technitium/config
-/opt/saltbox/technitium.ini
+```bash
+sb install mod-technitium
 ```
 
-The logs directory is optional for backup purposes.
+After the encrypted DNS settings have been applied, the Inventory override can be removed again. Certificate renewals do not require the administrator password.
+
+## DNS-over-TLS and DNS-over-QUIC
+
+Both are enabled by default:
+
+```yaml
+technitium_role_dot_enabled: true
+technitium_role_dot_port: "853"
+
+technitium_role_doq_enabled: true
+technitium_role_doq_port: "853"
+```
+
+Disabling either feature also removes its corresponding default host port mapping on the next role run.
+
+Technitium terminates TLS/QUIC itself. Traefik is not placed in front of port 853.
+
+## DNS-over-HTTPS
+
+This role deliberately does not publish Technitium's native HTTPS listener on host port 443 because Saltbox Traefik already owns that port.
+
+If DNS-over-HTTPS is added later, the clean Saltbox design is to let Traefik terminate HTTPS and reverse-proxy `/dns-query` to Technitium's internal DNS-over-HTTP listener, for example port `8053`. In that design Traefik uses its own web certificate and the dedicated ACME/PFX certificate remains for protocols that terminate TLS directly in Technitium, primarily DoT and DoQ.
 
 ## DNS bind address
 
-By default, port 53 is published on all host IPv4 interfaces:
+By default DNS services bind on all host IPv4 interfaces:
 
 ```yaml
 technitium_role_dns_bind_ip: "0.0.0.0"
 ```
 
-If this resolver should only be reachable through a LAN, NetBird, Tailscale or another private interface, override the value with that interface's host address before installing:
+To restrict them to a LAN, NetBird, Tailscale or another interface, override the value:
 
 ```yaml
 technitium_role_dns_bind_ip: "100.64.0.10"
 ```
 
-Technitium defaults recursive resolution to private networks only, but binding the service only where it is actually needed is still preferable.
+Make sure TCP/UDP port 53 and, when enabled, TCP/UDP port 853 are free on the selected address.
 
-Make sure TCP and UDP port 53 are free on the selected host address. If another resolver is already listening there, inspect it before installing:
+The role intentionally does not disable `systemd-resolved` or any other resolver automatically.
 
-```bash
-sudo ss -lntup | grep ':53 '
+## Paths and backups
+
+Persistent paths are normally:
+
+```text
+/opt/technitium/config       Technitium configuration
+/opt/technitium/logs         Technitium logs
+/opt/technitium/acme         ACME account, certificate and renewal state
+/opt/technitium/tls/dns.pfx  PKCS#12 certificate consumed by Technitium
+/opt/saltbox/technitium.ini  Persisted role secrets
 ```
 
-The role intentionally does not stop or disable `systemd-resolved` or any other host resolver automatically.
+Back up at least the Technitium configuration and Saltbox facts. Backing up ACME state avoids creating a new ACME account after a full restore, although a new certificate can be issued again when the DNS provider credentials remain available.
 
-## DNS-over-TLS and DNS-over-QUIC
+## Useful hostname overrides
 
-The upstream image also supports DNS-over-TLS and DNS-over-QUIC on port 853. They are not published by default.
-
-They can be exposed with:
+Separate hostnames on another domain:
 
 ```yaml
-technitium_role_docker_ports_custom:
-  - "{{ technitium_role_dns_bind_ip }}:853:853/tcp"
-  - "{{ technitium_role_dns_bind_ip }}:853:853/udp"
+technitium_role_web_subdomain: dns-admin
+technitium_role_web_domain: example.net
+technitium_role_service_dns_record: resolver
+technitium_role_service_dns_zone: example.net
 ```
 
-Configure TLS certificates and enable the corresponding protocols inside Technitium afterwards.
-
-DNS-over-HTTPS normally uses port 443, which is already owned by Traefik on a Saltbox host. Do not publish the Technitium container directly on host port 443 without redesigning that routing. Technitium's port 8053 or a dedicated Traefik route can be used for a later DoH setup.
-
-## DHCP
-
-The role is intentionally configured for DNS service using Docker bridge networking. Technitium's upstream Docker deployment recommends host networking for DHCP deployments. DHCP is therefore not enabled by this role.
-
-## Useful overrides
+Shared hostname:
 
 ```yaml
-# Web UI hostname
 technitium_role_web_subdomain: technitium
-
-# Direct DNS hostname
-technitium_role_service_dns_record: dns
-
-# Bind DNS only to a specific host interface
-technitium_role_dns_bind_ip: "100.64.0.10"
-
-# Add additional Docker environment variables supported by Technitium
-technitium_role_docker_envs_custom:
-  DNS_SERVER_PREFER_IPV6: "false"
-
-# Add additional published ports
-technitium_role_docker_ports_custom: []
+technitium_role_service_dns_record: technitium
 ```
 
-Upstream Docker configuration and environment-variable documentation:
+The derived values are:
 
-- https://github.com/TechnitiumSoftware/DnsServer/blob/master/docker-compose.yml
-- https://github.com/TechnitiumSoftware/DnsServer/blob/master/DockerEnvironmentVariables.md
+```text
+technitium_role_web_fqdn
+technitium_role_service_dns_fqdn
+```
+
+Normally they should not be overridden directly; override the subdomain/record and domain/zone variables instead.
+
+## Upstream documentation
+
+- Technitium DNS Server Docker configuration: <https://github.com/TechnitiumSoftware/DnsServer/blob/master/docker-compose.yml>
+- Technitium Docker environment variables: <https://github.com/TechnitiumSoftware/DnsServer/blob/master/DockerEnvironmentVariables.md>
+- Technitium HTTP API: <https://github.com/TechnitiumSoftware/DnsServer/blob/master/APIDOCS.md>
+- acme.sh: <https://github.com/acmesh-official/acme.sh>
+- acme.sh DNS providers: <https://github.com/acmesh-official/acme.sh/wiki/dnsapi>
