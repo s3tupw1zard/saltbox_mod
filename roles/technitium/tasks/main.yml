@@ -82,13 +82,16 @@
     - lookup('role_var', '_acme_enabled', role='technitium') | bool
     - lookup('role_var', '_acme_dns_provider', role='technitium') == 'dns_cf'
 
-- name: Remove existing Technitium Docker containers
+- name: Check existing Technitium PKCS#12 certificate
+  ansible.builtin.stat:
+    path: "{{ lookup('role_var', '_paths_tls_pfx', role='technitium') }}"
+  register: technitium_tls_pfx_before
+  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
+
+- name: Remove existing Technitium ACME container
   ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/remove_docker_container.yml"
   vars:
-    container_name: "{{ item }}"
-  loop:
-    - "{{ technitium_name }}"
-    - "{{ technitium_acme_name }}"
+    container_name: "{{ technitium_acme_name }}"
 
 - name: Create Technitium directories
   ansible.builtin.include_tasks: "{{ resources_tasks_path }}/directories/create_directories.yml"
@@ -163,28 +166,24 @@
     var_prefix: technitium_acme
   when: lookup('role_var', '_acme_enabled', role='technitium') | bool
 
-- name: Wait for Technitium PKCS#12 certificate
-  ansible.builtin.wait_for:
-    path: "{{ lookup('role_var', '_paths_tls_pfx', role='technitium') }}"
-    state: present
-    timeout: 300
-  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
-
-- name: Check Technitium PKCS#12 certificate
+- name: Wait for a freshly exported Technitium PKCS#12 certificate
   ansible.builtin.stat:
     path: "{{ lookup('role_var', '_paths_tls_pfx', role='technitium') }}"
   register: technitium_tls_pfx
+  retries: 60
+  delay: 5
+  until:
+    - technitium_tls_pfx.stat.exists
+    - technitium_tls_pfx.stat.size | int > 0
+    - >-
+      (not technitium_tls_pfx_before.stat.exists)
+      or (technitium_tls_pfx.stat.mtime | float > technitium_tls_pfx_before.stat.mtime | float)
   when: lookup('role_var', '_acme_enabled', role='technitium') | bool
 
-- name: Validate Technitium PKCS#12 certificate
-  ansible.builtin.assert:
-    that:
-      - technitium_tls_pfx.stat.exists
-      - technitium_tls_pfx.stat.size | int > 0
-    fail_msg: >-
-      The Technitium ACME companion did not produce a usable PKCS#12 certificate.
-      Inspect the {{ technitium_acme_name }} container logs for ACME/DNS errors.
-  when: lookup('role_var', '_acme_enabled', role='technitium') | bool
+- name: Remove existing Technitium Docker container
+  ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/remove_docker_container.yml"
+  vars:
+    container_name: "{{ technitium_name }}"
 
 - name: Create Technitium Docker container
   ansible.builtin.include_tasks: "{{ resources_tasks_path }}/docker/create_docker_container.yml"
