@@ -17,4 +17,5 @@
     - { role: infisical, tags: ['infisical'] }
     - { role: technitium, tags: ['technitium'] }
     - { role: silverbullet, tags: ['silverbullet'] }
+    - { role: dns_transport, tags: ['dns_transport'] }
     # Custom Apps End

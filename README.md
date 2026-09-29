@@ -74,6 +74,10 @@ sb install mod-silverbullet
 
 It deploys the official SilverBullet image as a browser-based Markdown editor behind Saltbox Traefik at `silverbullet.<saltbox-domain>`. Notes and server configuration persist under the normal appdata path. See [`roles/silverbullet/README.md`](roles/silverbullet/README.md) for first-run setup and Inventory overrides.
 
+## DNS transport through Traefik
+
+The optional `mod-dns_transport` role adds DoT and DoQ routing through Saltbox's existing Traefik instance. The backend DNS container is configurable; the role does not require Technitium. Traefik's static entrypoints and published ports must be added with the supported Saltbox Inventory overrides. See [`roles/dns_transport/README.md`](roles/dns_transport/README.md).
+
 ## Installing a custom role
 
 Every real role must be registered in `saltbox_mod.yml`:
@@ -144,6 +148,7 @@ roles/
   infisical/             # Infisical + PostgreSQL + Redis role
   technitium/            # Technitium DNS Server + ACME companion
   silverbullet/           # SilverBullet Markdown notes
+  dns_transport/          # Generic DNS transport routing through Traefik
   <app>/                 # other custom roles
 examples/
   kkrepo/                # standalone Compose reference

@@ -20,11 +20,17 @@ silverbullet_role_web_subdomain: notes
 silverbullet_role_web_domain: example.com
 ```
 
-Standardmäßig greift die Saltbox-Traefik-SSO-Middleware. Für einen bewusst anderweitig abgesicherten Zugang kann sie im Inventory geändert werden:
+Der erste Aufruf läuft standardmäßig durch Saltbox-SSO, damit der noch unkonfigurierte Setup-Assistent nicht öffentlich erreichbar ist. Melde dich zuerst an Saltbox-SSO an. `/.setup/` ist die von SilverBullet 2.11 verwendete interne URL für den Einrichtungsassistenten; beim Aufruf der Basis-URL sollte sie automatisch erscheinen. Die Anwendung wird **nicht** auf einen anderen Setup-Pfad umgestellt.
 
-```yaml
-silverbullet_role_traefik_sso_middleware: ""
+Bei einem HTTP 401 zunächst die Antwort ohne Traefik testen und die tatsächlich aktiven Router-Labels prüfen:
+
+```bash
+docker exec silverbullet wget -S -O /dev/null http://127.0.0.1:3000/.setup/ 2>&1 | head -30
+docker inspect silverbullet --format '{{json .Config.Labels}}'
+ls -ld /opt/silverbullet/data
 ```
+
+Ist die interne Setup-Seite erreichbar, aber die öffentliche URL antwortet 401, kommt die Sperre von einer vorgeschalteten Auth-Middleware oder einer SilverBullet-Zugangsregel; Dateirechte beheben keinen 401. Die Rolle setzt den Datenordner für den Saltbox-Benutzer schreibbar. Falls du die Saltbox-SSO-Middleware bewusst umgehen willst, richte vorher eine andere Zugangsbeschränkung ein und setze danach im Inventory `silverbullet_role_traefik_sso_middleware: ""` (anschließend `sb install mod-silverbullet`).
 
 Für zusätzliche Umgebungsvariablen und Mounts stehen `silverbullet_role_docker_envs_custom` und `silverbullet_role_docker_volumes_custom` bereit. Die Daten liegen standardmäßig unter `{{ server_appdata_path }}/silverbullet/data`; sichern Sie dieses Verzeichnis regelmäßig. Wenn vorhandene Markdown-Dateien eingebunden werden sollen, den vollständigen Datenpfad per Inventory überschreiben, bevor die Rolle installiert wird:
 
@@ -32,6 +38,6 @@ Für zusätzliche Umgebungsvariablen und Mounts stehen `silverbullet_role_docker
 silverbullet_role_paths_data_location: /pfad/zu/meinen/notizen
 ```
 
-Der Container übernimmt standardmäßig UID/GID des eingebundenen Datenverzeichnisses. Es werden keine Host-Ports veröffentlicht; Traefik leitet intern auf Port 3000.
+Die Rolle setzt den Datenordner auf den Saltbox-Benutzer mit Schreibrechten. Der Container übernimmt automatisch UID/GID dieses Verzeichnisses. Bestehende Notizdateien werden dabei nicht rekursiv umgeschrieben. Es werden keine Host-Ports veröffentlicht; Traefik leitet intern auf Port 3000.
 
 Weitere Details: [SilverBullet Docker](https://v2.silverbullet.md/Install/Docker) und [Konfiguration](https://silverbullet.md/Install/Configuration).

@@ -33,6 +33,7 @@ silverbullet_role_dns_proxy: "{{ dns_proxied }}"
 # Traefik
 ################################
 
+# Protect the first-run setup wizard until the admin account is configured.
 silverbullet_role_traefik_sso_middleware: "{{ traefik_default_sso_middleware }}"
 silverbullet_role_traefik_middleware_default: "{{ traefik_default_middleware }}"
 silverbullet_role_traefik_middleware_custom: ""

@@ -44,8 +44,12 @@ technitium_role_server_domain: "{{ lookup('role_var', '_service_dns_fqdn', role=
 # Encrypted DNS defaults. Technitium itself terminates DoT and DoQ.
 technitium_role_dot_enabled: true
 technitium_role_dot_port: "853"
+# Disable host publishing when Traefik owns TCP/853.
+technitium_role_dot_publish_port: true
 technitium_role_doq_enabled: true
 technitium_role_doq_port: "853"
+# Disable host publishing when Traefik forwards UDP/853 to this container.
+technitium_role_doq_publish_port: true
 
 ################################
 # ACME / TLS
@@ -152,12 +156,14 @@ technitium_role_docker_ports_default: >-
         (lookup('role_var', '_dns_bind_ip', role='technitium') | string)
         + ':' + (lookup('role_var', '_doq_port', role='technitium') | string)
         + ':' + (lookup('role_var', '_doq_port', role='technitium') | string) + '/udp'
-      ] if (lookup('role_var', '_doq_enabled', role='technitium') | bool) else [])
+      ] if ((lookup('role_var', '_doq_enabled', role='technitium') | bool)
+            and (lookup('role_var', '_doq_publish_port', role='technitium') | bool)) else [])
     + ([
         (lookup('role_var', '_dns_bind_ip', role='technitium') | string)
         + ':' + (lookup('role_var', '_dot_port', role='technitium') | string)
         + ':' + (lookup('role_var', '_dot_port', role='technitium') | string) + '/tcp'
-      ] if (lookup('role_var', '_dot_enabled', role='technitium') | bool) else [])
+      ] if ((lookup('role_var', '_dot_enabled', role='technitium') | bool)
+            and (lookup('role_var', '_dot_publish_port', role='technitium') | bool)) else [])
   }}
 technitium_role_docker_ports_custom: []
 technitium_role_docker_ports: "{{ lookup('role_var', '_docker_ports_default', role='technitium')

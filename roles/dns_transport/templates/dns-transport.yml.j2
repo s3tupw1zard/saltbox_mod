@@ -1,0 +1,36 @@
+# Managed by saltbox_mod dns_transport. Traefik watches /etc/traefik.
+{% if dns_transport_role_dot_enabled | bool %}
+tls:
+  options:
+    dns-dot:
+      alpnProtocols:
+        - dot
+tcp:
+  routers:
+    dns-dot:
+      entryPoints:
+        - dot
+      rule: "HostSNI(`{{ dns_transport_role_domain }}`)"
+      service: dns-dot
+      tls:
+        certResolver: "{{ dns_transport_role_certresolver }}"
+        options: dns-dot@file
+  services:
+    dns-dot:
+      loadBalancer:
+        servers:
+          - address: "{{ dns_transport_role_backend_host }}:{{ dns_transport_role_dot_backend_port }}"
+{% endif %}
+{% if dns_transport_role_doq_enabled | bool %}
+udp:
+  routers:
+    dns-doq:
+      entryPoints:
+        - doq
+      service: dns-doq
+  services:
+    dns-doq:
+      loadBalancer:
+        servers:
+          - address: "{{ dns_transport_role_backend_host }}:{{ dns_transport_role_doq_backend_port }}"
+{% endif %}
