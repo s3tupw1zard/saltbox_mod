@@ -234,7 +234,14 @@ technitium_role_doq_port: "853"
 
 Disabling either feature also removes its corresponding default host port mapping on the next role run.
 
-Technitium terminates TLS/QUIC itself. Traefik is not placed in front of port 853.
+By default Technitium terminates TLS/QUIC and publishes TCP/853 and UDP/853 itself. To route encrypted DNS via the optional `mod-dns_transport` role, keep both protocol flags enabled but release host port 853:
+
+```yaml
+technitium_role_dot_publish_port: false
+technitium_role_doq_publish_port: false
+```
+
+The internal DNS TCP/53 listener is then used behind Traefik's DoT TLS termination. The internal DoQ UDP/853 listener still terminates QUIC with Technitium's own certificate. See [the backend-neutral Traefik role](../dns_transport/README.md) for the full migration order and Inventory entries. The two publish-port settings affect host port mappings only; they do not disable either DNS protocol.
 
 ## DNS-over-HTTPS
 
