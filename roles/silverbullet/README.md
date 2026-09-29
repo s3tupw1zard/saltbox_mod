@@ -25,7 +25,7 @@ Der erste Aufruf läuft standardmäßig durch Saltbox-SSO, damit der noch unkonf
 Bei einem HTTP 401 zunächst die Antwort ohne Traefik testen und die tatsächlich aktiven Router-Labels prüfen:
 
 ```bash
-docker exec traefik wget -S -O /dev/null http://silverbullet:3000/.setup/ 2>&1 | head -30
+docker exec silverbullet wget -S -O /dev/null http://127.0.0.1:3000/.setup/ 2>&1 | head -30
 docker inspect silverbullet --format '{{json .Config.Labels}}'
 ls -ld /opt/silverbullet/data
 ```
