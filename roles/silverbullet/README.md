@@ -20,13 +20,17 @@ silverbullet_role_web_subdomain: notes
 silverbullet_role_web_domain: example.com
 ```
 
-SilverBullet übernimmt standardmäßig die Anmeldung selbst; eine zusätzliche Saltbox-SSO-Middleware ist für diese Rolle deaktiviert. `/.setup/` ist der von SilverBullet 2.11 verwendete Einrichtungsweg. Beim Aufruf der Basis-URL sollte die Einrichtung angezeigt werden. Falls weiterhin 401 erscheint, die tatsächlich gesetzten Traefik-Middleware-Labels und die Antwort über den internen Container-Port getrennt prüfen.
+Der erste Aufruf läuft standardmäßig durch Saltbox-SSO, damit der noch unkonfigurierte Setup-Assistent nicht öffentlich erreichbar ist. Melde dich zuerst an Saltbox-SSO an. `/.setup/` ist die von SilverBullet 2.11 verwendete interne URL für den Einrichtungsassistenten; beim Aufruf der Basis-URL sollte sie automatisch erscheinen. Die Anwendung wird **nicht** auf einen anderen Setup-Pfad umgestellt.
 
-Falls du zusätzlich Saltbox-SSO möchtest, kannst du es bewusst im Inventory aktivieren:
+Bei einem HTTP 401 zunächst die Antwort ohne Traefik testen und die tatsächlich aktiven Router-Labels prüfen:
 
-```yaml
-silverbullet_role_traefik_sso_middleware: "{{ traefik_default_sso_middleware }}"
+```bash
+docker exec traefik wget -S -O /dev/null http://silverbullet:3000/.setup/ 2>&1 | head -30
+docker inspect silverbullet --format '{{json .Config.Labels}}'
+ls -ld /opt/silverbullet/data
 ```
+
+Ist die interne Setup-Seite erreichbar, aber die öffentliche URL antwortet 401, kommt die Sperre von einer vorgeschalteten Auth-Middleware oder einer SilverBullet-Zugangsregel; Dateirechte beheben keinen 401. Die Rolle setzt den Datenordner für den Saltbox-Benutzer schreibbar. Falls du die Saltbox-SSO-Middleware bewusst umgehen willst, richte vorher eine andere Zugangsbeschränkung ein und setze danach im Inventory `silverbullet_role_traefik_sso_middleware: ""` (anschließend `sb install mod-silverbullet`).
 
 Für zusätzliche Umgebungsvariablen und Mounts stehen `silverbullet_role_docker_envs_custom` und `silverbullet_role_docker_volumes_custom` bereit. Die Daten liegen standardmäßig unter `{{ server_appdata_path }}/silverbullet/data`; sichern Sie dieses Verzeichnis regelmäßig. Wenn vorhandene Markdown-Dateien eingebunden werden sollen, den vollständigen Datenpfad per Inventory überschreiben, bevor die Rolle installiert wird:
 
