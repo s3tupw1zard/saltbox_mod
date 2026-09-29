@@ -16,4 +16,5 @@
     - { role: kkrepo, tags: ['kkrepo'] }
     - { role: infisical, tags: ['infisical'] }
     - { role: technitium, tags: ['technitium'] }
+    - { role: silverbullet, tags: ['silverbullet'] }
     # Custom Apps End
