@@ -1,0 +1,10 @@
+---
+# Generic DNS transport routing through Saltbox Traefik.
+dns_transport_role_backend_host: ""
+dns_transport_role_dot_backend_port: "53"
+dns_transport_role_doq_backend_port: "853"
+dns_transport_role_domain: "dns.{{ user.domain }}"
+dns_transport_role_dot_enabled: true
+dns_transport_role_doq_enabled: true
+dns_transport_role_certresolver: "{{ traefik_default_certresolver }}"
+dns_transport_role_config_path: "{{ server_appdata_path }}/traefik/dns-transport.yml"
