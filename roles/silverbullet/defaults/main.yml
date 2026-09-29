@@ -1,0 +1,82 @@
+---
+################################
+# Basics
+################################
+
+silverbullet_name: silverbullet
+
+################################
+# Paths
+################################
+
+silverbullet_role_paths_folder: "{{ silverbullet_name }}"
+silverbullet_role_paths_location: "{{ server_appdata_path }}/{{ silverbullet_role_paths_folder }}"
+silverbullet_role_paths_data_location: "{{ silverbullet_role_paths_location }}/data"
+silverbullet_role_paths_folders_list:
+  - "{{ silverbullet_role_paths_location }}"
+  - "{{ silverbullet_role_paths_data_location }}"
+
+################################
+# Web / DNS
+################################
+
+silverbullet_role_web_subdomain: "{{ silverbullet_name }}"
+silverbullet_role_web_domain: "{{ user.domain }}"
+silverbullet_role_web_port: "3000"
+silverbullet_role_web_url: "{{ lookup('role_web', role='silverbullet', scheme='https') }}"
+
+silverbullet_role_dns_record: "{{ lookup('role_var', '_web_subdomain', role='silverbullet') }}"
+silverbullet_role_dns_zone: "{{ lookup('role_var', '_web_domain', role='silverbullet') }}"
+silverbullet_role_dns_proxy: "{{ dns_proxied }}"
+
+################################
+# Traefik
+################################
+
+silverbullet_role_traefik_sso_middleware: "{{ traefik_default_sso_middleware }}"
+silverbullet_role_traefik_middleware_default: "{{ traefik_default_middleware }}"
+silverbullet_role_traefik_middleware_custom: ""
+silverbullet_role_traefik_middleware_default_api: "{{ traefik_default_middleware_api }}"
+silverbullet_role_traefik_middleware_custom_api: ""
+silverbullet_role_traefik_certresolver: "{{ traefik_default_certresolver }}"
+silverbullet_role_traefik_enabled: true
+silverbullet_role_traefik_api_enabled: false
+silverbullet_role_traefik_api_endpoint: ""
+
+################################
+# Docker
+################################
+
+silverbullet_role_docker_container: "{{ silverbullet_name }}"
+silverbullet_role_docker_image_pull: true
+silverbullet_role_docker_image_repo: "ghcr.io/silverbulletmd/silverbullet"
+silverbullet_role_docker_image_tag: "latest"
+silverbullet_role_docker_image: "{{ lookup('role_var', '_docker_image_repo', role='silverbullet') }}:{{ lookup('role_var', '_docker_image_tag', role='silverbullet') }}"
+
+# The official container detects the ownership of /data automatically.
+silverbullet_role_docker_envs_default:
+  TZ: "{{ tz }}"
+silverbullet_role_docker_envs_custom: {}
+silverbullet_role_docker_envs: "{{ lookup('role_var', '_docker_envs_default', role='silverbullet')
+                                  | combine(lookup('role_var', '_docker_envs_custom', role='silverbullet')) }}"
+
+silverbullet_role_docker_volumes_default:
+  - "{{ lookup('role_var', '_paths_data_location', role='silverbullet') }}:/data"
+silverbullet_role_docker_volumes_custom: []
+silverbullet_role_docker_volumes: "{{ lookup('role_var', '_docker_volumes_default', role='silverbullet')
+                                     + lookup('role_var', '_docker_volumes_custom', role='silverbullet') }}"
+
+silverbullet_role_docker_ports_default: []
+silverbullet_role_docker_ports_custom: []
+silverbullet_role_docker_ports: "{{ lookup('role_var', '_docker_ports_default', role='silverbullet')
+                                   + lookup('role_var', '_docker_ports_custom', role='silverbullet') }}"
+
+silverbullet_role_docker_hostname: "{{ silverbullet_name }}"
+silverbullet_role_docker_network_mode: "{{ docker_networks_name_common }}"
+silverbullet_role_docker_networks_alias: "{{ silverbullet_name }}"
+silverbullet_role_docker_networks_default: []
+silverbullet_role_docker_networks_custom: []
+silverbullet_role_docker_networks: "{{ docker_networks_common
+                                      + lookup('role_var', '_docker_networks_default', role='silverbullet')
+                                      + lookup('role_var', '_docker_networks_custom', role='silverbullet') }}"
+silverbullet_role_docker_restart_policy: unless-stopped

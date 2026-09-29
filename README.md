@@ -63,6 +63,17 @@ A dedicated `acme.sh` companion performs DNS-01 issuance for the encrypted-DNS h
 
 On a fresh installation, the role generates a random Technitium admin password and PKCS#12 password, persists them with Saltbox facts, and configures DoT/DoQ through Technitium's API. See [`roles/technitium/README.md`](roles/technitium/README.md) for hostname overrides, ACME provider configuration, existing-install migration and bind-address options.
 
+## SilverBullet
+
+The SilverBullet role is registered and can be installed with:
+
+```bash
+sb install saltbox-mod
+sb install mod-silverbullet
+```
+
+It deploys the official SilverBullet image as a browser-based Markdown editor behind Saltbox Traefik at `silverbullet.<saltbox-domain>`. Notes and server configuration persist under the normal appdata path. See [`roles/silverbullet/README.md`](roles/silverbullet/README.md) for first-run setup and Inventory overrides.
+
 ## Installing a custom role
 
 Every real role must be registered in `saltbox_mod.yml`:
@@ -132,6 +143,7 @@ roles/
   kkrepo/                # kkRepo + MySQL role
   infisical/             # Infisical + PostgreSQL + Redis role
   technitium/            # Technitium DNS Server + ACME companion
+  silverbullet/           # SilverBullet Markdown notes
   <app>/                 # other custom roles
 examples/
   kkrepo/                # standalone Compose reference
