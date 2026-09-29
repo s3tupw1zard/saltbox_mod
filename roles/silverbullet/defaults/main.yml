@@ -33,8 +33,8 @@ silverbullet_role_dns_proxy: "{{ dns_proxied }}"
 # Traefik
 ################################
 
-# SilverBullet handles login and first-run setup itself.
-silverbullet_role_traefik_sso_middleware: ""
+# Protect the first-run setup wizard until the admin account is configured.
+silverbullet_role_traefik_sso_middleware: "{{ traefik_default_sso_middleware }}"
 silverbullet_role_traefik_middleware_default: "{{ traefik_default_middleware }}"
 silverbullet_role_traefik_middleware_custom: ""
 silverbullet_role_traefik_middleware_default_api: "{{ traefik_default_middleware_api }}"
