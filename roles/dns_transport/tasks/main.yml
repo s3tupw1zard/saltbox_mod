@@ -1,0 +1,28 @@
+---
+- name: Validate DNS transport backend
+  ansible.builtin.assert:
+    that:
+      - dns_transport_role_backend_host | length > 0
+      - dns_transport_role_dot_enabled | bool or dns_transport_role_doq_enabled | bool
+    fail_msg: >-
+      Set dns_transport_role_backend_host to a DNS container reachable on the
+      Saltbox Docker network and enable at least one DNS transport.
+
+- name: Check Saltbox Traefik configuration directory
+  ansible.builtin.stat:
+    path: "{{ dns_transport_role_config_path | dirname }}"
+  register: dns_transport_traefik_dir
+
+- name: Require Saltbox Traefik to be installed first
+  ansible.builtin.assert:
+    that:
+      - dns_transport_traefik_dir.stat.isdir | default(false)
+    fail_msg: "Install Saltbox Traefik before running mod-dns_transport."
+
+- name: Write DNS transport routing to Saltbox Traefik file provider
+  ansible.builtin.template:
+    src: dns-transport.yml.j2
+    dest: "{{ dns_transport_role_config_path }}"
+    owner: "{{ user.name }}"
+    group: "{{ user.name }}"
+    mode: "0644"
